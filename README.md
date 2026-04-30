@@ -65,11 +65,11 @@ azd auth login --tenant-id <your-tenant-id>
 azd config set auth.useAzCliAuth true
 
 # 2) Create / select an azd environment
-azd env new <your-rg-environment>
+azd env new <your-environment-name>
 
 # 3) Required env vars
 azd env set AZURE_LOCATION       eastus2
-azd env set AZURE_RESOURCE_GROUP <your-rg-resource-group>
+azd env set AZURE_RESOURCE_GROUP <your-resource-group-name>
 
 # 4) Provision + build + deploy
 azd up
