@@ -1,4 +1,4 @@
-#  Transcribing User Audio using gpt-realtime and gpt-transcribe  
+# <img src="docs/img/ai-foundry.png" height="32" alt="Azure AI Foundry" /> Transcribing User Audio using gpt-realtime and gpt-transcribe  
 
 Browser demo for Azure OpenAI **Realtime** voice with **side-by-side transcription**:
 the Realtime model's own out-of-band (OOB) user-turn transcript is shown next to a parallel
