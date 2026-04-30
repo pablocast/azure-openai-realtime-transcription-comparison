@@ -13,6 +13,16 @@ Authentication to Azure OpenAI uses **managed identity** (no keys).
 
 ## Architecture
 
+![Architecture diagram](docs/img/architecture.png)
+
+The diagram contrasts the two approaches this app runs side-by-side:
+
+- **Left — Realtime + Transcription Model.** Audio is fanned out to both a dedicated transcription model (e.g. `gpt-4o-transcribe`) and the Realtime model. The transcription model produces the user-turn text; the Realtime model produces the spoken/text reply.
+- **Right — Realtime OOB transcription.** The Realtime model is asked, via an out-of-band response with `metadata=transcription`, to transcribe the same audio it just answered. No separate transcription model is needed; the session context is reused.
+
+Both transcripts are rendered in adjacent columns so you can compare quality, latency, and cost per turn.
+
+### Other components:
 - **Frontend** — Vite + React + TypeScript. Captures mic audio, opens a WebRTC peer connection
   to Azure OpenAI Realtime, renders the assistant transcript, the Realtime-OOB user transcript,
   and the `gpt-4o-transcribe` user transcript in three aligned columns plus a per-source cost panel.
@@ -25,14 +35,6 @@ Authentication to Azure OpenAI uses **managed identity** (no keys).
   - `AcrPull` on the Azure Container Registry (image pull)
   - `Cognitive Services OpenAI User` on the Foundry account (token minting)
 
-![Architecture diagram](docs/img/architecture.png)
-
-The diagram contrasts the two approaches this app runs side-by-side:
-
-- **Left — Realtime + Transcription Model.** Audio is fanned out to both a dedicated transcription model (e.g. `gpt-4o-transcribe`) and the Realtime model. The transcription model produces the user-turn text; the Realtime model produces the spoken/text reply.
-- **Right — Realtime OOB transcription.** The Realtime model is asked, via an out-of-band response with `metadata=transcription`, to transcribe the same audio it just answered. No separate transcription model is needed; the session context is reused.
-
-Both transcripts are rendered in adjacent columns so you can compare quality, latency, and cost per turn.
 ---
 
 ## Prerequisites
