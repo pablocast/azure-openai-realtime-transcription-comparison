@@ -24,7 +24,8 @@ Authentication to Azure OpenAI uses **managed identity** (no keys).
 - **Hosting** — Azure Container Apps with a user-assigned managed identity that has:
   - `AcrPull` on the Azure Container Registry (image pull)
   - `Cognitive Services OpenAI User` on the Foundry account (token minting)
-<br>
+
+
 ![Architecture diagram](docs/img/architecture.png)
 
 The diagram contrasts the two approaches this app runs side-by-side:
