@@ -1,6 +1,6 @@
 #  Transcribing User Audio using gpt-realtime and gpt-transcribe  
 
-Browser demo and Python CLI for Azure OpenAI **Realtime** voice with **side-by-side transcription**:
+Browser demo for Azure OpenAI **Realtime** voice with **side-by-side transcription**:
 the Realtime model's own out-of-band (OOB) user-turn transcript is shown next to a parallel
 `gpt-4o-transcribe` transcript so you can compare quality, latency, and cost in real time.
 
@@ -19,12 +19,12 @@ Authentication to Azure OpenAI uses **managed identity** (no keys).
 - **Backend** — Flask. Mints ephemeral Realtime client secrets via
   `POST /openai/v1/realtime/client_secrets` and exposes them at `/api/token`. Also serves the built
   SPA from the same origin.
-- **Azure OpenAI / Foundry** — `gpt-realtime`, `gpt-realtime-mini`, `gpt-4o-transcribe-diarize`
+- **Azure OpenAI / Foundry** — `gpt-realtime`, `gpt-realtime-mini`, `gpt-4o-transcribe`
   deployments created automatically by the Bicep.
 - **Hosting** — Azure Container Apps with a user-assigned managed identity that has:
   - `AcrPull` on the Azure Container Registry (image pull)
   - `Cognitive Services OpenAI User` on the Foundry account (token minting)
-
+<br>
 ![Architecture diagram](docs/img/architecture.png)
 
 The diagram contrasts the two approaches this app runs side-by-side:
@@ -63,33 +63,17 @@ azd auth login --tenant-id <your-tenant-id>
 azd config set auth.useAzCliAuth true
 
 # 2) Create / select an azd environment
-azd env new paschoaloto-realtime
+azd env new <your-rg-environment>
 
 # 3) Required env vars
 azd env set AZURE_LOCATION       eastus2
-azd env set AZURE_RESOURCE_GROUP rg-paschoaloto
+azd env set AZURE_RESOURCE_GROUP <your-rg-resource-group>
 
 # 4) Provision + build + deploy
 azd up
 ```
 
 When it finishes, azd prints `SERVICE_WEB_URI` — open it in a browser.
-
-### Optional overrides
-
-All have sensible defaults; set only the ones you want to change.
-
-| azd env var                                    | Default                       | Purpose                                      |
-| ---------------------------------------------- | ----------------------------- | -------------------------------------------- |
-| `AZURE_OPENAI_ACCOUNT_NAME`                    | `foundry-<env>-<token>`       | Globally unique Foundry account name         |
-| `AZURE_FOUNDRY_PROJECT_NAME`                   | `realtime`                    | Foundry project name                         |
-| `AZURE_OPENAI_REALTIME_DEPLOYMENT_NAME`        | `gpt-realtime-1.5-1`          | Realtime deployment                          |
-| `AZURE_OPENAI_REALTIME_MODEL_VERSION`          | `2025-08-28`                  | Realtime model version                       |
-| `AZURE_OPENAI_MINI_REALTIME_DEPLOYMENT_NAME`   | `gpt-realtime-mini-1`         | Mini realtime deployment                     |
-| `AZURE_OPENAI_INPUT_AUDIO_TRANSCRIPTION_MODEL` | `gpt-4o-transcribe-diarize-1` | Transcription deployment                     |
-| `AZURE_OPENAI_MODEL_CAPACITY`                  | `1`                           | TPM (in thousands) for each model deployment |
-| `AZURE_OPENAI_MODEL_SKU`                       | `GlobalStandard`              | Deployment SKU                               |
-| `REALTIME_VOICE`                               | `alloy`                       | Realtime voice                               |
 
 ### Redeploy after code changes
 
