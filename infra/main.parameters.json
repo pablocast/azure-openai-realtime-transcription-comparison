@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "${AZURE_ENV_NAME}"
+    },
+    "location": {
+      "value": "${AZURE_LOCATION=eastus2}"
+    },
+    "resourceGroupName": {
+      "value": "${AZURE_RESOURCE_GROUP}"
+    },
+    "foundryAccountName": {
+      "value": "${AZURE_OPENAI_ACCOUNT_NAME=}"
+    },
+    "foundryProjectName": {
+      "value": "${AZURE_FOUNDRY_PROJECT_NAME=realtime}"
+    },
+    "realtimeDeploymentName": {
+      "value": "${AZURE_OPENAI_REALTIME_DEPLOYMENT_NAME=gpt-realtime-1.5-1}"
+    },
+    "realtimeModelName": {
+      "value": "${AZURE_OPENAI_REALTIME_MODEL_NAME=gpt-realtime}"
+    },
+    "realtimeModelVersion": {
+      "value": "${AZURE_OPENAI_REALTIME_MODEL_VERSION=2025-08-28}"
+    },
+    "miniRealtimeDeploymentName": {
+      "value": "${AZURE_OPENAI_MINI_REALTIME_DEPLOYMENT_NAME=gpt-realtime-mini-1}"
+    },
+    "miniRealtimeModelName": {
+      "value": "${AZURE_OPENAI_MINI_REALTIME_MODEL_NAME=gpt-realtime-mini}"
+    },
+    "miniRealtimeModelVersion": {
+      "value": "${AZURE_OPENAI_MINI_REALTIME_MODEL_VERSION=2025-10-06}"
+    },
+    "transcriptionDeploymentName": {
+      "value": "${AZURE_OPENAI_INPUT_AUDIO_TRANSCRIPTION_MODEL=gpt-4o-transcribe-diarize-1}"
+    },
+    "transcriptionModelName": {
+      "value": "${AZURE_OPENAI_TRANSCRIPTION_MODEL_NAME=gpt-4o-transcribe}"
+    },
+    "transcriptionModelVersion": {
+      "value": "${AZURE_OPENAI_TRANSCRIPTION_MODEL_VERSION=2025-03-20}"
+    },
+    "modelCapacity": {
+      "value": "${AZURE_OPENAI_MODEL_CAPACITY=100}"
+    },
+    "modelSkuName": {
+      "value": "${AZURE_OPENAI_MODEL_SKU=GlobalStandard}"
+    },
+    "realtimeVoice": {
+      "value": "${REALTIME_VOICE=alloy}"
+    }
+  }
+}

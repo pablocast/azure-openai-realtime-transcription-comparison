@@ -1,0 +1,11 @@
+**/.git
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.env
+**/.DS_Store
+**/node_modules
+web/frontend/dist
+.azure
+infra
+*.ipynb

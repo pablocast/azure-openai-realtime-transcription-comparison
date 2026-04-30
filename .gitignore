@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Node / web
+node_modules/
+web/frontend/dist/
+
+# Env / secrets
+.env
+.env.*
+!.env.sample
+
+# azd
+.azure/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
