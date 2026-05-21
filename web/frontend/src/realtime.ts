@@ -20,6 +20,8 @@ export interface RealtimeConfig {
   transcriptionModel: string;
   voice: string;
   transcriptionInstructions: string;
+  promptVariants: string[];
+  defaultPromptVariant: string;
 }
 
 export interface SessionTotals {
@@ -78,7 +80,7 @@ export class RealtimeClient {
 
   constructor(private handlers: RealtimeHandlers) {}
 
-  async start(): Promise<void> {
+  async start(variant?: string): Promise<void> {
     this.handlers.onStateChange("connecting");
 
     const cfg = await fetchJson<RealtimeConfig>("/api/config");
@@ -87,7 +89,10 @@ export class RealtimeClient {
       : RealtimePricing.full;
     this.transcriptionInstructions = cfg.transcriptionInstructions ?? "";
 
-    const { token } = await fetchJson<{ token: string }>("/api/token");
+    const tokenUrl = variant
+      ? `/api/token?variant=${encodeURIComponent(variant)}`
+      : "/api/token";
+    const { token } = await fetchJson<{ token: string }>(tokenUrl);
     if (!token) throw new Error("Token service returned no ephemeral key.");
 
     const pc = new RTCPeerConnection();

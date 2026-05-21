@@ -143,10 +143,27 @@ body {
 
 .controls {
   display: flex;
+  align-items: center;
   justify-content: center;
   gap: 16px;
   padding: 12px;
 }
+.prompt-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text);
+}
+.prompt-select select {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  font-size: 14px;
+  cursor: pointer;
+}
+.prompt-select select:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn {
   border: none;
   cursor: pointer;

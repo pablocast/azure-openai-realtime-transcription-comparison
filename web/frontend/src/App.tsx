@@ -5,6 +5,16 @@ import { fmtTokens, fmtUnitPrice, fmtUsd } from "./costs";
 type SessionState = "idle" | "connecting" | "live" | "ended";
 type ChatRole = "user" | "assistant";
 
+interface PromptOption {
+  id: string;
+  label: string;
+}
+
+const PROMPT_OPTIONS: PromptOption[] = [
+  { id: "v1", label: "v1 — Insurance intake" },
+  { id: "v2", label: "v2 — Debt collection" },
+];
+
 interface ChatMessage {
   id: string;
   /** For user messages, the realtime conversation item id. */
@@ -31,6 +41,7 @@ export default function App() {
   const [rows, setRows] = useState<TurnRow[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
   const [costs, setCosts] = useState<SessionTotals | null>(null);
+  const [promptVariant, setPromptVariant] = useState<string>(PROMPT_OPTIONS[0].id);
   const clientRef = useRef<RealtimeClient | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -103,7 +114,7 @@ export default function App() {
     });
     clientRef.current = client;
     try {
-      await client.start();
+      await client.start(promptVariant);
     } catch (err) {
       log(`Failed to start: ${err instanceof Error ? err.message : String(err)}`);
       client.hangup();
@@ -175,6 +186,20 @@ export default function App() {
       </section>
 
       <footer className="controls">
+        <label className="prompt-select" title="Choose the assistant prompt variant">
+          <span>Prompt</span>
+          <select
+            value={promptVariant}
+            onChange={(e) => setPromptVariant(e.target.value)}
+            disabled={inCall}
+          >
+            {PROMPT_OPTIONS.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           className="btn btn-call"
           onClick={startCall}

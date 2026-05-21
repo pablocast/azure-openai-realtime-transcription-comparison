@@ -21,13 +21,17 @@ from urllib.parse import urlparse
 import requests
 from azure.identity import DefaultAzureCredential
 from dotenv import load_dotenv
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 # Allow importing the existing prompts so the assistant persona stays in sync.
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from src.prompts import REALTIME_MODEL_PROMPT, REALTIME_MODEL_TRANSCRIPTION_PROMPT  # noqa: E402
+from src.prompts import (  # noqa: E402
+    DEFAULT_REALTIME_PROMPT_VARIANT,
+    REALTIME_MODEL_PROMPTS,
+    REALTIME_MODEL_TRANSCRIPTION_PROMPT,
+)
 
 load_dotenv(ROOT / ".env")
 
@@ -65,13 +69,20 @@ def _bearer_token() -> str:
         return _cached["token"]
 
 
-def _session_config() -> dict[str, Any]:
+def _resolve_variant(value: str | None) -> str:
+    """Pick a known prompt variant, falling back to the default."""
+    if value and value in REALTIME_MODEL_PROMPTS:
+        return value
+    return DEFAULT_REALTIME_PROMPT_VARIANT
+
+
+def _session_config(variant: str) -> dict[str, Any]:
     """Match src/protocol.build_session_update so browser session = CLI session."""
     return {
         "session": {
             "type": "realtime",
             "model": DEPLOYMENT,
-            "instructions": REALTIME_MODEL_PROMPT,
+            "instructions": REALTIME_MODEL_PROMPTS[variant],
             "output_modalities": ["audio"],
             "audio": {
                 "input": {
@@ -105,12 +116,15 @@ def get_config():
             "transcriptionModel": TRANSCRIPTION_MODEL,
             "voice": VOICE,
             "transcriptionInstructions": REALTIME_MODEL_TRANSCRIPTION_PROMPT,
+            "promptVariants": list(REALTIME_MODEL_PROMPTS.keys()),
+            "defaultPromptVariant": DEFAULT_REALTIME_PROMPT_VARIANT,
         }
     )
 
 
 @app.get("/api/token")
 def get_token():
+    variant = _resolve_variant(request.args.get("variant"))
     try:
         bearer = _bearer_token()
         url = f"https://{_AZURE_HOST}/openai/v1/realtime/client_secrets"
@@ -120,7 +134,7 @@ def get_token():
                 "Authorization": f"Bearer {bearer}",
                 "Content-Type": "application/json",
             },
-            json=_session_config(),
+            json=_session_config(variant),
             timeout=30,
         )
         if r.status_code != 200:
@@ -131,6 +145,7 @@ def get_token():
             {
                 "token": data.get("value", ""),
                 "expiresAt": data.get("expires_at"),
+                "promptVariant": variant,
             }
         )
     except Exception as exc:  # pragma: no cover - surfaced to client
