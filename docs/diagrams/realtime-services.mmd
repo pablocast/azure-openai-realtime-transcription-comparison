@@ -1,0 +1,11 @@
+flowchart LR
+    subgraph SVC["Azure AIServices account (Foundry) - keyless, managed identity"]
+        direction TB
+        RT["gpt-realtime / gpt-realtime-mini<br/>STT + reasoning + TTS (one model)"]
+        OOB["Out-of-band response.create<br/>user transcript + anamnesis"]
+        RT -.-> OOB
+    end
+
+    Audio["Patient audio (PCM 24kHz)"] == "WebRTC" ==> RT
+    RT == "audio reply" ==> Out["Spoken reply"]
+    OOB -. "transcript + structured anamnesis" .-> App["Web UI"]

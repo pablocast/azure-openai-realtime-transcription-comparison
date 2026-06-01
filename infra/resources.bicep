@@ -3,7 +3,12 @@ param tags object
 param resourceToken string
 param azureOpenAiEndpoint string
 param azureOpenAiRealtimeDeployment string
+param azureOpenAiMiniRealtimeDeployment string = ''
 param azureOpenAiTranscriptionModel string
+param azureOpenAiChatDeployment string = ''
+param azureOpenAiMiniChatDeployment string = ''
+param speechEndpoint string = ''
+param speechResourceId string = ''
 param realtimeVoice string
 
 var abbrs = {
@@ -115,7 +120,12 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           env: [
             { name: 'AZURE_OPENAI_ENDPOINT', value: azureOpenAiEndpoint }
             { name: 'AZURE_OPENAI_REALTIME_DEPLOYMENT_NAME', value: azureOpenAiRealtimeDeployment }
+            { name: 'AZURE_OPENAI_MINI_REALTIME_DEPLOYMENT_NAME', value: azureOpenAiMiniRealtimeDeployment }
             { name: 'AZURE_OPENAI_INPUT_AUDIO_TRANSCRIPTION_MODEL', value: azureOpenAiTranscriptionModel }
+            { name: 'AZURE_OPENAI_CHAT_DEPLOYMENT_NAME', value: azureOpenAiChatDeployment }
+            { name: 'AZURE_OPENAI_MINI_CHAT_DEPLOYMENT_NAME', value: azureOpenAiMiniChatDeployment }
+            { name: 'AZURE_SPEECH_ENDPOINT', value: speechEndpoint }
+            { name: 'AZURE_SPEECH_RESOURCE_ID', value: speechResourceId }
             { name: 'REALTIME_VOICE', value: realtimeVoice }
             { name: 'AZURE_CLIENT_ID', value: uami.properties.clientId }
             { name: 'PORT', value: '8080' }

@@ -37,6 +37,40 @@ Both transcripts are rendered in adjacent columns so you can compare quality, la
 
 ---
 
+## Scenarios
+
+The app lets you mix and match three independent dimensions from the footer controls,
+so you can compare approaches, prompts, and model tiers without redeploying.
+
+### 1. Conversation mode
+
+| Mode | Transport | How it works | Best for |
+| --- | --- | --- | --- |
+| **Realtime (speech-to-speech)** | WebRTC peer connection to Azure OpenAI Realtime | A single `gpt-realtime` model does STT + reasoning + TTS in one session. User-turn text comes from the model's own out-of-band (OOB) transcript. | Lowest-latency natural conversation; barge-in; the side-by-side transcription comparison. |
+| **Pipeline (STT → AOAI → TTS)** | Azure Speech SDK (WebSocket) + chat completions (SSE) | Decoupled stages: Azure Speech `SpeechRecognizer` (auto language ID) → Azure OpenAI chat completions → Azure Speech `SpeechSynthesizer` (locked voice). | Swapping models per stage, strict structured outputs, and full control over each step. |
+
+### 2. Prompt / use case
+
+| Prompt | Description |
+| --- | --- |
+| **v1 — Insurance intake** | Voice agent that collects insurance intake details. |
+| **v2 — Debt collection** | Voice agent for a debt-collection conversation. |
+| **v3 — Medical Anamnesis** | Clinical interview that extracts a structured anamnesis. Renders the live anamnesis panel instead of the transcription-compare table, and runs schema-native extraction after each assistant reply. |
+
+### 3. Model tier
+
+The model list adapts to the selected mode:
+
+| Mode | Full | Mini |
+| --- | --- | --- |
+| Realtime | `gpt-realtime-1.5` | `gpt-realtime-mini` |
+| Pipeline | `gpt-5.4` | `gpt-5.4-mini` |
+
+The **Cost** panel breaks down token/character usage and price per source for whichever
+combination you pick, so you can compare quality, latency, and cost side by side.
+
+---
+
 ## Prerequisites
 
 - An Azure subscription with permission to create resources and role assignments.

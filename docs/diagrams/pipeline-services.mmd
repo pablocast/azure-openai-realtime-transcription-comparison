@@ -1,0 +1,14 @@
+flowchart LR
+    subgraph SVC["Azure AIServices account (Foundry) - keyless, managed identity"]
+        direction TB
+        STT["Azure Speech - SpeechRecognizer<br/>auto language ID (es-CO / en-US)"]
+        LLM["Azure OpenAI - gpt-5.4 / gpt-5.4-mini<br/>chat completions (SSE) + strict json_schema"]
+        TTS["Azure Speech - SpeechSynthesizer<br/>locked voice"]
+        STT == "recognized text" ==> LLM
+        LLM == "streamed reply (sentences)" ==> TTS
+        LLM == "strict JSON object" ==> EXTR["Anamnesis extraction<br/>(same chat model)"]
+    end
+
+    Audio["Patient audio"] == "mic" ==> STT
+    TTS == "audio reply" ==> Out["Spoken reply"]
+    EXTR -. "full anamnesis" .-> App["Web UI"]

@@ -22,6 +22,16 @@ export interface Usage {
   };
 }
 
+/** Usage shape returned by the chat/completions API (text models). */
+export interface ChatUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  prompt_tokens_details?: {
+    cached_tokens?: number;
+  };
+}
+
 export interface CostPart {
   cost: number;
   tokens: number;
@@ -65,6 +75,27 @@ export class RealtimePricing {
     20.0,
   );
 }
+
+/**
+ * Pricing for the STT -> AOAI -> TTS pipeline chat (text) models.
+ * USD per 1M tokens.
+ */
+export class ChatPricing {
+  constructor(
+    public name: string,
+    public input: number,
+    public cachedInput: number,
+    public output: number,
+  ) {}
+
+  static full = new ChatPricing("gpt-5.4", 2.5, 0.25, 15.0);
+  static mini = new ChatPricing("gpt-5.4-mini", 0.75, 0.08, 4.5);
+}
+
+// TTS: USD per 1M characters synthesized (HD voice; standard neural assumed same).
+export const TTS_PER_M_CHARS = 15.0;
+// STT: USD per audio hour (Azure Speech standard continuous recognition).
+export const STT_PER_HOUR = 1.0;
 
 // gpt-4o-transcribe-diarize
 const TRANSCRIBE_AUDIO_INPUT = 6.0;
@@ -121,6 +152,45 @@ export function computeRealtimeCost(usage: Usage, p: RealtimePricing): CostBreak
   };
   const totalCost = Object.values(parts).reduce((a, b) => a + b.cost, 0);
   return { totalCost, parts };
+}
+
+/**
+ * Cost of one chat/completions call (text models gpt-5.4 / gpt-5.4-mini).
+ * Splits prompt tokens into cached vs non-cached using prompt_tokens_details.
+ */
+export function computeChatCost(usage: ChatUsage, p: ChatPricing): CostBreakdown {
+  const prompt = usage.prompt_tokens ?? 0;
+  const cachedIn = usage.prompt_tokens_details?.cached_tokens ?? 0;
+  const nonCachedIn = Math.max(prompt - cachedIn, 0);
+  const out = usage.completion_tokens ?? 0;
+
+  const parts = {
+    input: part(nonCachedIn, p.input),
+    cached_input: part(cachedIn, p.cachedInput),
+    output: part(out, p.output),
+  };
+  const totalCost = parts.input.cost + parts.cached_input.cost + parts.output.cost;
+  return { totalCost, parts };
+}
+
+/** Cost of synthesizing `chars` characters of TTS. */
+export function computeTtsCost(chars: number): CostBreakdown {
+  const cost = PER_M(chars, TTS_PER_M_CHARS);
+  return {
+    totalCost: cost,
+    parts: { characters: { tokens: chars, unitPricePerM: TTS_PER_M_CHARS, cost } },
+  };
+}
+
+/** Cost of `seconds` of STT continuous recognition. */
+export function computeSttCost(seconds: number): CostBreakdown {
+  const cost = (seconds / 3600) * STT_PER_HOUR;
+  return {
+    totalCost: cost,
+    parts: {
+      audio_seconds: { tokens: seconds, unitPricePerM: STT_PER_HOUR, cost },
+    },
+  };
 }
 
 export function fmtUsd(n: number): string {

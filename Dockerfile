@@ -33,5 +33,8 @@ CMD ["gunicorn", \
      "--workers", "2", \
      "--threads", "8", \
      "--timeout", "60", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "--log-level", "info", \
      "--chdir", "/app/web/backend", \
      "server:app"]
