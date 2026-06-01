@@ -20,3 +20,18 @@ resource aoaiUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
     principalType: 'ServicePrincipal'
   }
 }
+
+// "Cognitive Services Speech User" — lets the managed identity mint Speech
+// (STT/TTS) auth tokens against this multi-service AIServices account for the
+// STT -> AOAI -> TTS pipeline.
+var speechUserRoleId = 'f2dc8367-1007-4938-bd23-fe263f013447'
+
+resource speechUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(aoai.id, principalId, speechUserRoleId)
+  scope: aoai
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', speechUserRoleId)
+    principalId: principalId
+    principalType: 'ServicePrincipal'
+  }
+}

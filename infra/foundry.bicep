@@ -73,4 +73,5 @@ resource deployments 'Microsoft.CognitiveServices/accounts/deployments@2025-04-0
 output accountName string = account.name
 output accountId string = account.id
 output endpoint string = 'https://${account.name}.openai.azure.com/'
+output speechEndpoint string = account.properties.endpoint
 output projectName string = project.name

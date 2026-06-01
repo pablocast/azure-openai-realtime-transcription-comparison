@@ -46,6 +46,24 @@ param transcriptionModelName string = 'gpt-4o-transcribe-diarize'
 @description('Underlying transcription model version.')
 param transcriptionModelVersion string = '2025-10-15'
 
+@description('Chat (text) model deployment name for the STT->AOAI->TTS pipeline.')
+param chatDeploymentName string = 'gpt-5.4'
+
+@description('Underlying chat model name.')
+param chatModelName string = 'gpt-5.4'
+
+@description('Underlying chat model version.')
+param chatModelVersion string = '2025-11-01'
+
+@description('Mini chat (text) model deployment name for the STT->AOAI->TTS pipeline.')
+param miniChatDeploymentName string = 'gpt-5.4-mini'
+
+@description('Underlying mini chat model name.')
+param miniChatModelName string = 'gpt-5.4-mini'
+
+@description('Underlying mini chat model version.')
+param miniChatModelVersion string = '2025-11-01'
+
 @description('Capacity (TPM in thousands) for each model deployment.')
 param modelCapacity int = 50
 
@@ -87,6 +105,20 @@ var modelDeployments = [
     skuName: modelSkuName
     capacity: modelCapacity
   }
+  {
+    name: chatDeploymentName
+    modelName: chatModelName
+    modelVersion: chatModelVersion
+    skuName: modelSkuName
+    capacity: modelCapacity
+  }
+  {
+    name: miniChatDeploymentName
+    modelName: miniChatModelName
+    modelVersion: miniChatModelVersion
+    skuName: modelSkuName
+    capacity: modelCapacity
+  }
 ]
 
 module foundry 'foundry.bicep' = {
@@ -111,7 +143,12 @@ module resources 'resources.bicep' = {
     resourceToken: resourceToken
     azureOpenAiEndpoint: foundry.outputs.endpoint
     azureOpenAiRealtimeDeployment: realtimeDeploymentName
+    azureOpenAiMiniRealtimeDeployment: miniRealtimeDeploymentName
     azureOpenAiTranscriptionModel: transcriptionDeploymentName
+    azureOpenAiChatDeployment: chatDeploymentName
+    azureOpenAiMiniChatDeployment: miniChatDeploymentName
+    speechEndpoint: foundry.outputs.speechEndpoint
+    speechResourceId: foundry.outputs.accountId
     realtimeVoice: realtimeVoice
   }
 }
@@ -138,3 +175,7 @@ output AZURE_FOUNDRY_PROJECT_NAME string = foundry.outputs.projectName
 output AZURE_OPENAI_REALTIME_DEPLOYMENT_NAME string = realtimeDeploymentName
 output AZURE_OPENAI_INPUT_AUDIO_TRANSCRIPTION_MODEL string = transcriptionDeploymentName
 output AZURE_OPENAI_MINI_REALTIME_DEPLOYMENT_NAME string = miniRealtimeDeploymentName
+output AZURE_OPENAI_CHAT_DEPLOYMENT_NAME string = chatDeploymentName
+output AZURE_OPENAI_MINI_CHAT_DEPLOYMENT_NAME string = miniChatDeploymentName
+output AZURE_SPEECH_ENDPOINT string = foundry.outputs.speechEndpoint
+output AZURE_SPEECH_RESOURCE_ID string = foundry.outputs.accountId
