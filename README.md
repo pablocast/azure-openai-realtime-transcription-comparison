@@ -66,6 +66,9 @@ The model list adapts to the selected mode:
 | Realtime | `gpt-realtime-1.5` | `gpt-realtime-mini` |
 | Pipeline | `gpt-5.4` | `gpt-5.4-mini` |
 
+The pipeline mode also offers a third, lower-cost `gpt-5-mini` option
+(`AZURE_OPENAI_GPT5_MINI_CHAT_DEPLOYMENT_NAME`).
+
 The **Cost** panel breaks down token/character usage and price per source for whichever
 combination you pick, so you can compare quality, latency, and cost side by side.
 

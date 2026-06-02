@@ -35,6 +35,7 @@ export interface PipelineTotals {
   stt: CostBreakdown;
   total: number;
   pricingName: string;
+  extractPricingName: string;
 }
 
 interface PipelineConfig {
@@ -53,6 +54,12 @@ interface SpeechToken {
 
 const EMPTY: CostBreakdown = { totalCost: 0, parts: {} };
 const SENTENCE_PUNCT = /[.?!:;。？！]/;
+/** Chat (text) pricing keyed by the model tier sent to /api/chat. */
+const CHAT_PRICING_BY_TIER: Record<string, ChatPricing> = {
+  full: ChatPricing.full,
+  mini: ChatPricing.mini,
+  gpt5mini: ChatPricing.gpt5mini,
+};
 /** Token-auth lifetime is ~10 min; refresh comfortably before expiry. */
 const TOKEN_REFRESH_MS = 8 * 60 * 1000;
 
@@ -66,6 +73,8 @@ export class PipelineClient {
   private variant = "v1";
   private chatTier = "full";
   private pricing: ChatPricing = ChatPricing.full;
+  private extractTier = "full";
+  private extractPricing: ChatPricing = ChatPricing.full;
   private speechEndpoint = "";
   private sttLocales: string[] = [];
   private ttsVoices: Record<string, string> = {};
@@ -106,14 +115,17 @@ export class PipelineClient {
     this.anamneseState = state ?? {};
   }
 
-  async start(variant?: string, modelTier?: string): Promise<void> {
+  async start(variant?: string, modelTier?: string, extractTier?: string): Promise<void> {
     this.handlers.onStateChange("connecting");
 
     const cfg = await fetchJson<PipelineConfig>("/api/config");
     this.variant = variant ?? cfg.defaultPromptVariant;
     this.isMedical = this.variant === "medical";
     this.chatTier = (modelTier ?? "full").toLowerCase();
-    this.pricing = this.chatTier === "mini" ? ChatPricing.mini : ChatPricing.full;
+    this.pricing = CHAT_PRICING_BY_TIER[this.chatTier] ?? ChatPricing.full;
+    // Extraction model defaults to the conversation model when not specified.
+    this.extractTier = (extractTier ?? this.chatTier).toLowerCase();
+    this.extractPricing = CHAT_PRICING_BY_TIER[this.extractTier] ?? this.pricing;
 
     const tok = await this.fetchSpeechToken();
     this.speechEndpoint = tok.endpoint;
@@ -200,6 +212,7 @@ export class PipelineClient {
       stt,
       total,
       pricingName: this.pricing.name,
+      extractPricingName: this.extractPricing.name,
     };
   }
 
@@ -399,7 +412,7 @@ export class PipelineClient {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [{ role: "user", content }],
-          model: this.chatTier,
+          model: this.extractTier,
         }),
       });
       if (!r.ok) {
@@ -413,7 +426,7 @@ export class PipelineClient {
       if (data.usage) {
         this.totals.extract = mergeCost(
           this.totals.extract,
-          computeChatCost(data.usage, this.pricing),
+          computeChatCost(data.usage, this.extractPricing),
         );
       }
       if (data.patch && typeof data.patch === "object") {

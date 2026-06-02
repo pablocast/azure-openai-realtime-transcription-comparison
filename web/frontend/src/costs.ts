@@ -90,6 +90,7 @@ export class ChatPricing {
 
   static full = new ChatPricing("gpt-5.4", 2.5, 0.25, 15.0);
   static mini = new ChatPricing("gpt-5.4-mini", 0.75, 0.08, 4.5);
+  static gpt5mini = new ChatPricing("gpt-5-mini", 0.25, 0.025, 2.0);
 }
 
 // TTS: USD per 1M characters synthesized (HD voice; standard neural assumed same).
