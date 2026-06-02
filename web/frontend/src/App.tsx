@@ -9,7 +9,7 @@ type Mode = "realtime" | "pipeline";
 
 /** Shared surface both clients expose, so the UI can drive either one. */
 type VoiceClient = {
-  start(variant?: string, modelTier?: string): Promise<void>;
+  start(variant?: string, modelTier?: string, extractTier?: string): Promise<void>;
   hangup(): SessionTotals | PipelineTotals;
   setAnamneseState(state: Record<string, unknown>): void;
 };
@@ -49,6 +49,7 @@ const MODEL_OPTIONS: Record<Mode, ModelOption[]> = {
   pipeline: [
     { id: "full", label: "gpt-5.4" },
     { id: "mini", label: "gpt-5.4-mini" },
+    { id: "gpt5mini", label: "gpt-5-mini" },
   ],
 };
 
@@ -81,6 +82,7 @@ export default function App() {
   const [mode, setMode] = useState<Mode>("realtime");
   const [promptVariant, setPromptVariant] = useState<string>(PROMPT_OPTIONS[0].id);
   const [modelTier, setModelTier] = useState<string>("full");
+  const [extractModelTier, setExtractModelTier] = useState<string>("full");
   const [form, setForm] = useState<Record<string, any>>({});
   const clientRef = useRef<VoiceClient | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
@@ -172,7 +174,7 @@ export default function App() {
         : new RealtimeClient(handlers);
     clientRef.current = client;
     try {
-      await client.start(promptVariant, modelTier);
+      await client.start(promptVariant, modelTier, extractModelTier);
     } catch (err) {
       log(`Failed to start: ${err instanceof Error ? err.message : String(err)}`);
       client.hangup();
@@ -285,7 +287,7 @@ export default function App() {
           </select>
         </label>
         <label className="prompt-select" title="Choose the model tier">
-          <span>Model</span>
+          <span>{mode === "pipeline" && promptVariant === "medical" ? "Conversation model" : "Model"}</span>
           <select
             value={modelTier}
             onChange={(e) => setModelTier(e.target.value)}
@@ -298,6 +300,22 @@ export default function App() {
             ))}
           </select>
         </label>
+        {mode === "pipeline" && promptVariant === "medical" && (
+          <label className="prompt-select" title="Choose the anamnesis extraction model">
+            <span>Extraction model</span>
+            <select
+              value={extractModelTier}
+              onChange={(e) => setExtractModelTier(e.target.value)}
+              disabled={inCall}
+            >
+              {MODEL_OPTIONS.pipeline.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <button
           className="btn btn-call"
           onClick={startCall}
@@ -383,7 +401,7 @@ function buildSections(totals: SessionTotals | PipelineTotals): CostSection[] {
       {
         key: "extract",
         label: "Chat model · anamnesis extraction",
-        sub: `${totals.pricingName} · structured JSON per turn`,
+        sub: `${totals.extractPricingName} · structured JSON per turn`,
         total: totals.extract.totalCost,
         parts: totals.extract.parts,
       },
