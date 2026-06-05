@@ -59,6 +59,7 @@ const CHAT_PRICING_BY_TIER: Record<string, ChatPricing> = {
   full: ChatPricing.full,
   mini: ChatPricing.mini,
   gpt5mini: ChatPricing.gpt5mini,
+  gpt54nano: ChatPricing.gpt54nano,
 };
 /** Token-auth lifetime is ~10 min; refresh comfortably before expiry. */
 const TOKEN_REFRESH_MS = 8 * 60 * 1000;

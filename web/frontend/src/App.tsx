@@ -53,11 +53,12 @@ const MODEL_OPTIONS: Record<Mode, ModelOption[]> = {
     { id: "full", label: "gpt-5.4" },
     { id: "mini", label: "gpt-5.4-mini" },
     { id: "gpt5mini", label: "gpt-5-mini" },
+    { id: "gpt54nano", label: "gpt-5.4-nano" },
   ],
   voicelive: [
-    { id: "gpt-5-nano", label: "gpt-5-nano" },
-    { id: "phi4-mini", label: "phi4-mini" },
-    { id: "phi4-mm-realtime", label: "phi4-mm-realtime" },
+    { id: "gpt-realtime", label: "Voice Live Pro · gpt-realtime" },
+    { id: "gpt-realtime-mini", label: "Voice Live Basic · gpt-realtime-mini" },
+    { id: "gpt-5-nano", label: "Voice Live Lite · gpt-5-nano" },
   ],
 };
 
@@ -206,6 +207,8 @@ export default function App() {
   };
 
   const inCall = state === "live" || state === "connecting";
+  const showAnamnesePanel =
+    promptVariant === "medical" && (mode === "pipeline" || mode === "realtime");
 
   return (
     <div className="app">
@@ -222,7 +225,7 @@ export default function App() {
         <span className={`status status-${state}`}>{state}</span>
       </header>
 
-      {promptVariant === "medical" && mode === "pipeline" ? (
+      {showAnamnesePanel ? (
         <AnamnesePanel form={form} />
       ) : mode === "realtime" ? (
         <section className="compare">
@@ -256,7 +259,7 @@ export default function App() {
         </section>
       ) : null}
 
-      {!(promptVariant === "medical" && mode === "pipeline") && (
+      {!showAnamnesePanel && (
         <section className="chat">
           <div className="chat-header">Conversation</div>
           <div className="chat-body">

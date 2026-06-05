@@ -1,20 +1,24 @@
 /**
- * WebRTC client for the Azure Voice Live API — **Lite** tier.
+ * WebSocket client for the Azure Voice Live API.
  *
- * Unlike the AOAI Realtime client (which POSTs its SDP offer straight to Azure
- * using an ephemeral key), Voice Live negotiates over a WebSocket signaling
- * channel that requires an Entra `Authorization` header the browser can't set.
- * So the control channel is relayed (keyless) through our backend at
- * `/api/voicelive/ws`, which also injects the persona `session.update`.
+ * Audio is relayed through our backend (`/api/voicelive/ws`) rather than over
+ * WebRTC: the browser captures mic PCM and streams it up as
+ * `input_audio_buffer.append` frames, and the service streams the assistant's
+ * voice back as `response.audio.delta` PCM frames that we schedule for
+ * playback. The backend connects to the Azure Voice Live realtime WebSocket
+ * (keyless, Entra auth) and injects the persona `session.update` so the prompt,
+ * server VAD and voice never live in the client.
  *
- * Two event streams reach us:
- *   - Signaling WS (relayed):  rtc.call.sdp.created, rtc.call.error,
- *                              session.created / session.updated, error
- *   - Data channel "voice-live-events" (peer-to-peer): conversation items,
- *     input_audio_buffer.*, conversation.item.input_audio_transcription.*,
- *     response.* (response.done carries usage for cost reporting)
+ * Audio format (both directions): PCM16, 24 kHz, mono.
  *
- * Audio (RTP) flows peer-to-peer and never touches the backend.
+ * Events handled:
+ *   - session.created / session.updated  (configure + send greeting)
+ *   - input_audio_buffer.speech_started  (barge-in: stop playback)
+ *   - conversation.item.* / input_audio_transcription.completed (user bubbles)
+ *   - response.audio.delta / response.output_audio.delta (assistant audio)
+ *   - response.audio_transcript.delta / response.text.delta (assistant text)
+ *   - response.done (usage -> cost)
+ *   - error / response.error
  */
 
 import {
@@ -26,7 +30,7 @@ import {
 import type { RealtimeHandlers } from "./realtime";
 
 export interface VoiceLiveTotals {
-  /** Per-response usage from the data channel (audio in/out + text). */
+  /** Per-response usage from the service (audio in/out + text). */
   conversation: CostBreakdown;
   total: number;
   pricingName: string;
@@ -35,10 +39,17 @@ export interface VoiceLiveTotals {
 interface VoiceLiveConfig {
   promptVariants: string[];
   defaultPromptVariant: string;
+  voiceLivePromptVariants?: string[];
+  defaultVoiceLivePromptVariant?: string;
   voiceLiveModels: string[];
   defaultVoiceLiveModel: string;
   voiceLiveGreeting: string;
 }
+
+/** Audio sample rate for Voice Live PCM16 frames (Hz). */
+const SAMPLE_RATE = 24000;
+/** Mic capture block size (frames) for the ScriptProcessor. */
+const CAPTURE_BUFFER = 4096;
 
 const EMPTY: CostBreakdown = { totalCost: 0, parts: {} };
 const SPECIAL_TOKEN_RE = /<\|[^|>]+\|>/g;
@@ -68,15 +79,51 @@ function sanitize(s: string): string {
   return s.replace(SPECIAL_TOKEN_RE, "").trim();
 }
 
+/** Convert a Float32 [-1,1] audio block to little-endian PCM16 base64. */
+function floatToPcm16Base64(input: Float32Array): string {
+  const pcm = new Int16Array(input.length);
+  for (let i = 0; i < input.length; i++) {
+    const s = Math.max(-1, Math.min(1, input[i]));
+    pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  const bytes = new Uint8Array(pcm.buffer);
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(
+      null,
+      bytes.subarray(i, i + chunk) as unknown as number[],
+    );
+  }
+  return btoa(binary);
+}
+
+/** Decode a base64 PCM16 frame to a Float32 [-1,1] array. */
+function pcm16Base64ToFloat(b64: string): Float32Array {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const pcm = new Int16Array(bytes.buffer);
+  const out = new Float32Array(pcm.length);
+  for (let i = 0; i < pcm.length; i++) out[i] = pcm[i] / 0x8000;
+  return out;
+}
+
 export class VoiceLiveClient {
   private ws: WebSocket | null = null;
-  private pc: RTCPeerConnection | null = null;
-  private dc: RTCDataChannel | null = null;
-  private audioEl: HTMLAudioElement | null = null;
-  private localStream: MediaStream | null = null;
-  private offerSdp = "";
 
-  private pricing: VoiceLivePricing = VoiceLivePricing.nano;
+  // ---- Capture (mic -> service) ----
+  private captureCtx: AudioContext | null = null;
+  private localStream: MediaStream | null = null;
+  private micSource: MediaStreamAudioSourceNode | null = null;
+  private processor: ScriptProcessorNode | null = null;
+
+  // ---- Playback (service -> speakers) ----
+  private playbackCtx: AudioContext | null = null;
+  private playHead = 0;
+  private activeSources = new Set<AudioBufferSourceNode>();
+
+  private pricing: VoiceLivePricing = VoiceLivePricing.lite;
   private variant = "v1";
   private greeting = "";
   private greetingSent = false;
@@ -92,14 +139,20 @@ export class VoiceLiveClient {
 
   constructor(private handlers: RealtimeHandlers) {}
 
-  /** Called by the UI after every merge so the extractor sees the latest state. */
+  /** Called by the UI after every merge; not used on the Voice Live path. */
   setAnamneseState(_state: Record<string, unknown>): void {}
 
   async start(variant?: string, modelTier?: string, _extractTier?: string): Promise<void> {
     this.handlers.onStateChange("connecting");
 
     const cfg = await fetchJson<VoiceLiveConfig>("/api/config");
-    this.variant = variant ?? cfg.defaultPromptVariant;
+    const allowedVariants =
+      cfg.voiceLivePromptVariants && cfg.voiceLivePromptVariants.length > 0
+        ? cfg.voiceLivePromptVariants
+        : (cfg.promptVariants ?? []);
+    const defaultVariant =
+      cfg.defaultVoiceLivePromptVariant ?? allowedVariants[0] ?? cfg.defaultPromptVariant;
+    this.variant = variant && allowedVariants.includes(variant) ? variant : defaultVariant;
     this.greeting = cfg.voiceLiveGreeting ?? "";
 
     const models = cfg.voiceLiveModels ?? [];
@@ -109,44 +162,10 @@ export class VoiceLiveClient {
         : cfg.defaultVoiceLiveModel || models[0] || "gpt-5-nano";
     this.pricing = VoiceLivePricing.forModel(model);
 
-    // ---- Set up the peer connection before signaling ----
-    const pc = new RTCPeerConnection();
-    this.pc = pc;
+    // ---- Mic capture: PCM16 @ 24 kHz mono ----
+    await this.setupCapture();
 
-    const audio = document.createElement("audio");
-    audio.autoplay = true;
-    document.body.appendChild(audio);
-    this.audioEl = audio;
-    pc.ontrack = (ev) => {
-      if (ev.streams[0]) audio.srcObject = ev.streams[0];
-    };
-
-    this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    for (const track of this.localStream.getAudioTracks()) {
-      pc.addTrack(track, this.localStream);
-    }
-
-    const dc = pc.createDataChannel("voice-live-events");
-    this.dc = dc;
-    dc.addEventListener("open", () => {
-      this.handlers.onLog("Voice Live data channel open");
-      this.sendGreeting();
-    });
-    dc.addEventListener("message", (ev) => this.handleEvent(ev.data, "datachannel"));
-
-    pc.onconnectionstatechange = () => {
-      this.handlers.onLog(`PeerConnection: ${pc.connectionState}`);
-      if (pc.connectionState === "connected") this.handlers.onStateChange("live");
-      if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
-        this.handlers.onStateChange("ended");
-      }
-    };
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    this.offerSdp = offer.sdp ?? "";
-
-    // ---- Open the relayed signaling WebSocket ----
+    // ---- Open the relayed audio WebSocket ----
     const params = new URLSearchParams();
     params.set("variant", this.variant);
     params.set("model", model);
@@ -157,37 +176,40 @@ export class VoiceLiveClient {
       const ws = new WebSocket(wsUrl);
       this.ws = ws;
       ws.onopen = () => {
-        this.handlers.onLog(`Voice Live signaling open (model=${model})`);
-        // Send the SDP offer; the backend injects session.update right after.
-        ws.send(JSON.stringify({ type: "rtc.call.sdp.create", sdp_offer: this.offerSdp }));
+        this.handlers.onLog(`Voice Live WebSocket open (model=${model})`);
+        this.handlers.onStateChange("live");
         resolve();
       };
       ws.onerror = () => {
-        this.handlers.onLog("Voice Live signaling error");
-        reject(new Error("Voice Live signaling connection failed"));
+        this.handlers.onLog("Voice Live WebSocket error");
+        reject(new Error("Voice Live WebSocket connection failed"));
       };
       ws.onclose = () => {
-        this.handlers.onLog("Voice Live signaling closed");
+        this.handlers.onLog("Voice Live WebSocket closed");
+        this.handlers.onStateChange("ended");
       };
-      ws.onmessage = (ev) => this.handleEvent(ev.data, "signaling");
+      ws.onmessage = (ev) => this.handleEvent(ev.data);
     });
   }
 
   hangup(): VoiceLiveTotals {
     this.handlers.onLog("Hanging up...");
-    try { this.ws?.close(); } catch { /* ignore */ }
-    try { this.dc?.close(); } catch { /* ignore */ }
-    try { this.pc?.close(); } catch { /* ignore */ }
+    this.stopPlayback();
+    try { this.processor?.disconnect(); } catch { /* ignore */ }
+    try { this.micSource?.disconnect(); } catch { /* ignore */ }
     for (const t of this.localStream?.getTracks() ?? []) t.stop();
-    if (this.audioEl) {
-      this.audioEl.srcObject = null;
-      this.audioEl.remove();
-    }
+    try { this.captureCtx?.close(); } catch { /* ignore */ }
+    try { this.playbackCtx?.close(); } catch { /* ignore */ }
+    try { this.ws?.close(); } catch { /* ignore */ }
+
     this.ws = null;
-    this.dc = null;
-    this.pc = null;
+    this.processor = null;
+    this.micSource = null;
     this.localStream = null;
-    this.audioEl = null;
+    this.captureCtx = null;
+    this.playbackCtx = null;
+    this.sessionReady = false;
+    this.greetingSent = false;
     this.handlers.onStateChange("idle");
 
     const total = this.totals.conversation.totalCost;
@@ -199,13 +221,84 @@ export class VoiceLiveClient {
   }
 
   // ----------------------------------------------------------------------
+  private async setupCapture(): Promise<void> {
+    this.localStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+      },
+    });
+
+    const ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
+    this.captureCtx = ctx;
+    if (ctx.state === "suspended") {
+      try { await ctx.resume(); } catch { /* ignore */ }
+    }
+
+    const source = ctx.createMediaStreamSource(this.localStream);
+    this.micSource = source;
+    const processor = ctx.createScriptProcessor(CAPTURE_BUFFER, 1, 1);
+    this.processor = processor;
+    processor.onaudioprocess = (ev) => {
+      if (!this.sessionReady || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      const input = ev.inputBuffer.getChannelData(0);
+      const audio = floatToPcm16Base64(input);
+      this.ws.send(JSON.stringify({ type: "input_audio_buffer.append", audio }));
+    };
+    // ScriptProcessor needs a sink to fire; output is left silent.
+    source.connect(processor);
+    processor.connect(ctx.destination);
+  }
+
+  private ensurePlaybackCtx(): AudioContext {
+    if (!this.playbackCtx || this.playbackCtx.state === "closed") {
+      this.playbackCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+      this.playHead = 0;
+    }
+    if (this.playbackCtx.state === "suspended") {
+      this.playbackCtx.resume().catch(() => { /* ignore */ });
+    }
+    return this.playbackCtx;
+  }
+
+  /** Schedule a decoded PCM frame for gapless playback. */
+  private enqueueAudio(b64: string): void {
+    const samples = pcm16Base64ToFloat(b64);
+    if (samples.length === 0) return;
+    const ctx = this.ensurePlaybackCtx();
+    const buffer = ctx.createBuffer(1, samples.length, SAMPLE_RATE);
+    buffer.getChannelData(0).set(samples);
+    const node = ctx.createBufferSource();
+    node.buffer = buffer;
+    node.connect(ctx.destination);
+    const startAt = Math.max(ctx.currentTime, this.playHead);
+    node.start(startAt);
+    this.playHead = startAt + buffer.duration;
+    this.activeSources.add(node);
+    node.onended = () => this.activeSources.delete(node);
+  }
+
+  /** Stop and drop all scheduled audio (barge-in / hangup). */
+  private stopPlayback(): void {
+    for (const node of this.activeSources) {
+      try { node.stop(); } catch { /* ignore */ }
+      try { node.disconnect(); } catch { /* ignore */ }
+    }
+    this.activeSources.clear();
+    if (this.playbackCtx) this.playHead = this.playbackCtx.currentTime;
+  }
+
   private sendGreeting(): void {
     if (
       this.greetingSent ||
       !this.greeting ||
       !this.sessionReady ||
-      !this.dc ||
-      this.dc.readyState !== "open"
+      !this.ws ||
+      this.ws.readyState !== WebSocket.OPEN
     ) {
       return;
     }
@@ -214,23 +307,32 @@ export class VoiceLiveClient {
     // Trigger the agent to open the conversation. We send a plain
     // response.create (no instructions override) so each prompt variant's own
     // system prompt drives the opening turn in the correct language.
-    this.dc.send(JSON.stringify({ type: "response.create" }));
+    this.ws.send(JSON.stringify({ type: "response.create" }));
   }
 
-  private handleEvent(raw: unknown, source: "signaling" | "datachannel"): void {
+  private handleEvent(raw: unknown): void {
     if (typeof raw !== "string") return;
     let evt: any;
     try { evt = JSON.parse(raw); } catch {
-      this.handlers.onLog(`${source}: non-JSON message`);
+      this.handlers.onLog("WS: non-JSON message");
       return;
     }
     const type: string = evt.type ?? "(no type)";
-    // Trace every event so the Logs panel shows the full event flow.
-    this.handlers.onLog(`${source === "signaling" ? "WS" : "DC"} ◀ ${type}`);
+    this.handlers.onLog(`WS ◀ ${type}`);
 
     // ---- Errors: dump the whole payload, it carries the reason ----
-    if (type === "rtc.call.error" || type === "error" || type === "response.error") {
+    if (type === "error" || type === "response.error") {
       this.handlers.onLog(`Voice Live error: ${JSON.stringify(evt.error ?? evt)}`);
+      return;
+    }
+
+    // ---- Assistant audio frames (handle naming variants) ----
+    if (/(?:output_)?audio\.delta$/.test(type)) {
+      const delta: string = evt.delta ?? "";
+      if (delta) this.enqueueAudio(delta);
+      return;
+    }
+    if (/(?:output_)?audio\.done$/.test(type)) {
       return;
     }
 
@@ -250,30 +352,17 @@ export class VoiceLiveClient {
     }
 
     switch (type) {
-      // ---- Signaling: SDP answer ----
-      case "rtc.call.sdp.created": {
-        const sdp = evt.sdp_answer ?? evt.sdp ?? evt.answer?.sdp;
-        if (sdp && this.pc) {
-          this.pc
-            .setRemoteDescription({ type: "answer", sdp })
-            .then(() => this.handlers.onLog("WebRTC negotiated"))
-            .catch((e) => this.handlers.onLog(`setRemoteDescription failed: ${e}`));
-        } else {
-          this.handlers.onLog(`sdp.created without answer sdp: ${JSON.stringify(evt).slice(0, 200)}`);
-        }
-        return;
-      }
       case "session.created":
         return;
       case "session.updated": {
-        // Send the proactive greeting only after the session is configured,
-        // so it doesn't race the backend-injected session.update. session.updated
-        // usually arrives on the signaling WS before the data channel opens, so
-        // the dc "open" handler also calls sendGreeting() — whichever is last wins.
+        // Session is configured (prompt, server VAD, voice). Safe to greet.
         this.sessionReady = true;
         this.sendGreeting();
         return;
       }
+
+      case "response.created":
+        return;
 
       // ---- User turn lifecycle ----
       case "conversation.item.added":
@@ -283,7 +372,10 @@ export class VoiceLiveClient {
         return;
       }
       case "input_audio_buffer.speech_started":
-      case "input_audio_buffer.speech_stopped":
+        // Barge-in: the user started talking, so stop any assistant audio that
+        // is still playing. The service (interrupt_response:true) cancels the
+        // in-flight response on its side.
+        this.stopPlayback();
         return;
 
       case "conversation.item.input_audio_transcription.completed": {

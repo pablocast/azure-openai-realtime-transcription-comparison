@@ -56,6 +56,7 @@ DEFAULT_MODEL_TIER = "full"
 CHAT_DEPLOYMENT = os.environ.get("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME") or None
 MINI_CHAT_DEPLOYMENT = os.environ.get("AZURE_OPENAI_MINI_CHAT_DEPLOYMENT_NAME") or None
 GPT5_MINI_CHAT_DEPLOYMENT = os.environ.get("AZURE_OPENAI_GPT5_MINI_CHAT_DEPLOYMENT_NAME") or None
+GPT54_NANO_CHAT_DEPLOYMENT = os.environ.get("AZURE_OPENAI_GPT5_4_NANO_CHAT_DEPLOYMENT_NAME") or None
 CHAT_DEPLOYMENTS: dict[str, str] = {}
 if CHAT_DEPLOYMENT:
     CHAT_DEPLOYMENTS["full"] = CHAT_DEPLOYMENT
@@ -63,6 +64,8 @@ if MINI_CHAT_DEPLOYMENT:
     CHAT_DEPLOYMENTS["mini"] = MINI_CHAT_DEPLOYMENT
 if GPT5_MINI_CHAT_DEPLOYMENT:
     CHAT_DEPLOYMENTS["gpt5mini"] = GPT5_MINI_CHAT_DEPLOYMENT
+if GPT54_NANO_CHAT_DEPLOYMENT:
+    CHAT_DEPLOYMENTS["gpt54nano"] = GPT54_NANO_CHAT_DEPLOYMENT
 DEFAULT_CHAT_TIER = "full" if "full" in CHAT_DEPLOYMENTS else (
     next(iter(CHAT_DEPLOYMENTS), "")
 )
@@ -114,14 +117,15 @@ else:
     VOICE_LIVE_ENDPOINT = f"https://{_voice_live_host}".rstrip("/")
 
 VOICE_LIVE_API_VERSION = os.environ.get("VOICE_LIVE_API_VERSION", "2026-01-01-preview")
+VOICE_LIVE_ALLOWED_MODELS = ["gpt-realtime", "gpt-realtime-mini", "gpt-5-nano"]
 VOICE_LIVE_MODELS = [
     s.strip()
-    for s in os.environ.get("VOICE_LIVE_MODELS", "gpt-5-nano,phi4-mini,phi4-mm-realtime").split(",")
-    if s.strip()
+    for s in os.environ.get("VOICE_LIVE_MODELS", "gpt-realtime,gpt-realtime-mini,gpt-5-nano").split(",")
+    if s.strip() and s.strip() in VOICE_LIVE_ALLOWED_MODELS
 ]
 if not VOICE_LIVE_MODELS:
-    VOICE_LIVE_MODELS = ["gpt-5-nano"]
-DEFAULT_VOICE_LIVE_MODEL = os.environ.get("DEFAULT_VOICE_LIVE_MODEL", VOICE_LIVE_MODELS[0]).strip()
+    VOICE_LIVE_MODELS = VOICE_LIVE_ALLOWED_MODELS.copy()
+DEFAULT_VOICE_LIVE_MODEL = os.environ.get("DEFAULT_VOICE_LIVE_MODEL", "gpt-5-nano").strip()
 if DEFAULT_VOICE_LIVE_MODEL not in VOICE_LIVE_MODELS:
     DEFAULT_VOICE_LIVE_MODEL = VOICE_LIVE_MODELS[0]
 VOICE_LIVE_VOICE = os.environ.get("VOICE_LIVE_VOICE", "es-CO-SalomeNeural")
@@ -172,6 +176,10 @@ def _resolve_variant(value: str | None) -> str:
     return DEFAULT_REALTIME_PROMPT_VARIANT
 
 
+VOICE_LIVE_PROMPT_VARIANTS = list(REALTIME_MODEL_PROMPTS.keys())
+DEFAULT_VOICE_LIVE_PROMPT_VARIANT = DEFAULT_REALTIME_PROMPT_VARIANT
+
+
 def _resolve_model(value: str | None) -> tuple[str, str]:
     """Return (tier, deployment_name) for the requested model tier.
 
@@ -205,32 +213,40 @@ def _resolve_voice_live_model(value: str | None) -> str:
 
 
 def _voice_live_ws_url(model: str) -> str:
-    """Build the upstream Voice Live WebSocket URL for the selected model."""
+    """Build the upstream Voice Live realtime WebSocket URL for the model.
+
+    Uses the WebSocket transport (audio relayed through this backend as
+    base64 PCM frames) rather than the WebRTC `/calls` signaling path.
+    """
     base = VOICE_LIVE_ENDPOINT.rstrip("/")
     if base.startswith("https://"):
         base = "wss://" + base[len("https://") :]
     elif base.startswith("http://"):
         base = "ws://" + base[len("http://") :]
     return (
-        f"{base}/voice-live/realtime/calls"
+        f"{base}/voice-live/realtime"
         f"?api-version={VOICE_LIVE_API_VERSION}&model={quote(model)}"
     )
 
 
 def _voice_live_session_update(variant: str, model: str) -> dict[str, Any]:
-    """Session update payload for Voice Live web clients.
+    """Session update payload for Voice Live web clients (WebSocket transport).
 
     Notes:
-      - Keep `turn_detection.type=server_vad` on this WebRTC path.
+      - `turn_detection.type=server_vad` so the service auto-responds per turn.
+      - Audio is PCM16 24 kHz mono in both directions (matches the browser
+        capture/playback in web/frontend/src/voicelive.ts).
       - Prompt and session knobs stay server-side (same pattern as /api/chat).
     """
     session: dict[str, Any] = {
         "instructions": REALTIME_MODEL_PROMPTS[variant],
         "modalities": ["text", "audio"],
+        "input_audio_format": "pcm16",
+        "output_audio_format": "pcm16",
         "turn_detection": {
             "type": "server_vad",
-            "threshold": 0.6,
-            "silence_duration_ms": 800,
+            "threshold": 0.5,
+            "silence_duration_ms": 500,
             "prefix_padding_ms": 300,
             "create_response": True,
             "interrupt_response": True,
@@ -239,9 +255,10 @@ def _voice_live_session_update(variant: str, model: str) -> dict[str, Any]:
         "input_audio_echo_cancellation": {"type": "server_echo_cancellation"},
         "voice": {"name": VOICE_LIVE_VOICE, "type": "azure-standard"},
     }
-    # Native speech-to-speech model variant currently does not expose the same
-    # transcription options as the text-centric Lite models.
-    if "phi4-mm" not in model.lower():
+    # Native speech-to-speech models do not require explicit input transcription.
+    # Keep Azure Speech transcription only for text-centric tiers (for UI transcripts).
+    model_lower = model.lower()
+    if "phi4-mm" not in model_lower and "gpt-realtime" not in model_lower:
         session["input_audio_transcription"] = {
             "model": "azure-speech",
             "language": VOICE_LIVE_TRANSCRIPTION_LANGUAGE,
@@ -297,6 +314,8 @@ def get_config():
             "transcriptionInstructions": REALTIME_MODEL_TRANSCRIPTION_PROMPT,
             "promptVariants": list(REALTIME_MODEL_PROMPTS.keys()),
             "defaultPromptVariant": DEFAULT_REALTIME_PROMPT_VARIANT,
+            "voiceLivePromptVariants": VOICE_LIVE_PROMPT_VARIANTS,
+            "defaultVoiceLivePromptVariant": DEFAULT_VOICE_LIVE_PROMPT_VARIANT,
             "anamneseExtractInstructions": ANAMNESE_EXTRACT_PROMPT,
             "anamneseJsonSchema": ANAMNESE_JSON_SCHEMA,
             "anamneseSchemaName": ANAMNESE_SCHEMA_NAME,
@@ -381,7 +400,14 @@ def get_speech_token():
 
 @sock.route("/api/voicelive/ws")
 def voicelive_ws(client):
-    """Relay browser signaling for Voice Live, injecting server-side session config."""
+    """Relay browser audio for Voice Live over WebSocket.
+
+    The browser streams mic PCM as `input_audio_buffer.append` frames; this
+    backend forwards them to the Azure Voice Live realtime WebSocket and pumps
+    the service events (including `response.audio.delta` PCM) back down. The
+    server-side session config (prompt, VAD, voice) is injected right after the
+    upstream connection opens so it never lives in the client.
+    """
     variant = _resolve_variant(request.args.get("variant"))
     model = _resolve_voice_live_model(request.args.get("model"))
     ws_url = _voice_live_ws_url(model)
@@ -403,6 +429,18 @@ def voicelive_ws(client):
         app.logger.exception("voicelive connect failed")
         try:
             client.send(json.dumps({"type": "error", "error": {"message": str(exc)}}))
+        except Exception:
+            pass
+        return
+
+    # Inject the server-side session config immediately so the service is
+    # configured (prompt, server VAD, voice, PCM formats) before audio flows.
+    try:
+        upstream.send(json.dumps(_voice_live_session_update(variant, model)))
+    except Exception:
+        app.logger.exception("voicelive session.update failed")
+        try:
+            upstream.close()
         except Exception:
             pass
         return
@@ -431,22 +469,12 @@ def voicelive_ws(client):
     pump_thread = threading.Thread(target=_upstream_to_client, daemon=True)
     pump_thread.start()
 
-    session_sent = False
     try:
         while not stop.is_set():
             msg = client.receive()
             if msg is None:
                 break
             upstream.send(msg)
-            if session_sent:
-                continue
-            try:
-                evt = json.loads(msg)
-            except Exception:
-                evt = {}
-            if evt.get("type") == "rtc.call.sdp.create":
-                upstream.send(json.dumps(_voice_live_session_update(variant, model)))
-                session_sent = True
     except Exception:
         app.logger.exception("voicelive relay loop failed")
     finally:

@@ -77,45 +77,48 @@ export class RealtimePricing {
 }
 
 /**
- * Azure Speech Voice Live API pricing (Lite tier), USD per 1M tokens.
+ * Azure Speech Voice Live API pricing, USD per 1M tokens.
  * Source: https://azure.microsoft.com/en-us/pricing/details/speech/
  */
 export class VoiceLivePricing extends RealtimePricing {
-  static nano = new VoiceLivePricing(
-    "gpt-5-nano",
-    0.11,
-    0.04,
-    0.44,
-    15.0,
-    0.04,
-    25.0,
-  );
-
-  static phiMini = new VoiceLivePricing(
-    "phi4-mini",
-    0.11,
-    0.04,
-    0.44,
-    15.0,
-    0.04,
-    25.0,
-  );
-
-  static phiRealtime = new VoiceLivePricing(
-    "phi4-mm-realtime",
-    0.11,
-    0.04,
-    0.44,
+  // Voice Live Pro -> gpt-realtime (native speech-to-speech tier)
+  static pro = new VoiceLivePricing(
+    "Voice Live Pro (gpt-realtime)",
     4.0,
+    0.4,
+    16.0,
+    32.0,
+    0.4,
+    64.0,
+  );
+
+  // Voice Live Basic/Standard -> gpt-realtime-mini
+  static basic = new VoiceLivePricing(
+    "Voice Live Basic (gpt-realtime-mini)",
+    0.66,
+    0.33,
+    2.64,
+    11.0,
+    0.33,
+    22.0,
+  );
+
+  // Voice Live Lite -> gpt-5-nano
+  static lite = new VoiceLivePricing(
+    "Voice Live Lite (gpt-5-nano)",
+    0.11,
+    0.04,
+    0.44,
+    15.0,
     0.04,
     25.0,
   );
 
   static forModel(model: string): VoiceLivePricing {
     const m = (model || "").toLowerCase();
-    if (m.includes("phi4-mm")) return VoiceLivePricing.phiRealtime;
-    if (m.includes("phi4-mini")) return VoiceLivePricing.phiMini;
-    return VoiceLivePricing.nano;
+    if (m.includes("gpt-realtime-mini")) return VoiceLivePricing.basic;
+    if (m.includes("gpt-realtime")) return VoiceLivePricing.pro;
+    return VoiceLivePricing.lite;
   }
 }
 
@@ -134,6 +137,7 @@ export class ChatPricing {
   static full = new ChatPricing("gpt-5.4", 2.5, 0.25, 15.0);
   static mini = new ChatPricing("gpt-5.4-mini", 0.75, 0.08, 4.5);
   static gpt5mini = new ChatPricing("gpt-5-mini", 0.25, 0.025, 2.0);
+  static gpt54nano = new ChatPricing("gpt-5.4-nano", 0.20, 0.02, 1.25);
 }
 
 // TTS: USD per 1M characters synthesized (HD voice; standard neural assumed same).
