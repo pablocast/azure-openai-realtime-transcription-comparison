@@ -17,13 +17,15 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import requests
+import websocket as ws_client
 from azure.identity import DefaultAzureCredential
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
 from flask_cors import CORS
+from flask_sock import Sock
 from src.schema import (
     ANAMNESE_JSON_SCHEMA,
     ANAMNESE_SCHEMA_NAME,
@@ -99,11 +101,39 @@ COGNITIVE_SCOPE = "https://cognitiveservices.azure.com/.default"
 # Resource hostname like "foundry-paschoaloto.openai.azure.com"
 _AZURE_HOST = urlparse(ENDPOINT).netloc or ENDPOINT
 
+# ---- Voice Live (Speech in Foundry Tools) ----
+_voice_live_env = (os.environ.get("VOICE_LIVE_ENDPOINT") or "").strip().rstrip("/")
+if _voice_live_env:
+    VOICE_LIVE_ENDPOINT = _voice_live_env
+else:
+    _voice_live_host = _AZURE_HOST
+    if _voice_live_host.endswith(".openai.azure.com"):
+        _voice_live_host = (
+            _voice_live_host[: -len(".openai.azure.com")] + ".services.ai.azure.com"
+        )
+    VOICE_LIVE_ENDPOINT = f"https://{_voice_live_host}".rstrip("/")
+
+VOICE_LIVE_API_VERSION = os.environ.get("VOICE_LIVE_API_VERSION", "2026-01-01-preview")
+VOICE_LIVE_MODELS = [
+    s.strip()
+    for s in os.environ.get("VOICE_LIVE_MODELS", "gpt-5-nano,phi4-mini,phi4-mm-realtime").split(",")
+    if s.strip()
+]
+if not VOICE_LIVE_MODELS:
+    VOICE_LIVE_MODELS = ["gpt-5-nano"]
+DEFAULT_VOICE_LIVE_MODEL = os.environ.get("DEFAULT_VOICE_LIVE_MODEL", VOICE_LIVE_MODELS[0]).strip()
+if DEFAULT_VOICE_LIVE_MODEL not in VOICE_LIVE_MODELS:
+    DEFAULT_VOICE_LIVE_MODEL = VOICE_LIVE_MODELS[0]
+VOICE_LIVE_VOICE = os.environ.get("VOICE_LIVE_VOICE", "es-CO-SalomeNeural")
+VOICE_LIVE_TRANSCRIPTION_LANGUAGE = os.environ.get("VOICE_LIVE_TRANSCRIPTION_LANGUAGE", "es")
+VOICE_LIVE_GREETING = os.environ.get("VOICE_LIVE_GREETING", "")
+
 # Built SPA assets (web/frontend/dist) — present in the container image.
 SPA_DIR = ROOT / "web" / "frontend" / "dist"
 
 app = Flask(__name__, static_folder=None)
 CORS(app)
+sock = Sock(app)
 
 _credential = DefaultAzureCredential()
 _token_lock = threading.Lock()
@@ -166,6 +196,59 @@ def _resolve_chat_model(value: str | None) -> tuple[str, str]:
     raise RuntimeError("No chat deployment configured (AZURE_OPENAI_CHAT_DEPLOYMENT_NAME).")
 
 
+def _resolve_voice_live_model(value: str | None) -> str:
+    """Pick a configured Voice Live model, falling back to default."""
+    model = (value or "").strip()
+    if model and model in VOICE_LIVE_MODELS:
+        return model
+    return DEFAULT_VOICE_LIVE_MODEL
+
+
+def _voice_live_ws_url(model: str) -> str:
+    """Build the upstream Voice Live WebSocket URL for the selected model."""
+    base = VOICE_LIVE_ENDPOINT.rstrip("/")
+    if base.startswith("https://"):
+        base = "wss://" + base[len("https://") :]
+    elif base.startswith("http://"):
+        base = "ws://" + base[len("http://") :]
+    return (
+        f"{base}/voice-live/realtime/calls"
+        f"?api-version={VOICE_LIVE_API_VERSION}&model={quote(model)}"
+    )
+
+
+def _voice_live_session_update(variant: str, model: str) -> dict[str, Any]:
+    """Session update payload for Voice Live web clients.
+
+    Notes:
+      - Keep `turn_detection.type=server_vad` on this WebRTC path.
+      - Prompt and session knobs stay server-side (same pattern as /api/chat).
+    """
+    session: dict[str, Any] = {
+        "instructions": REALTIME_MODEL_PROMPTS[variant],
+        "modalities": ["text", "audio"],
+        "turn_detection": {
+            "type": "server_vad",
+            "threshold": 0.6,
+            "silence_duration_ms": 800,
+            "prefix_padding_ms": 300,
+            "create_response": True,
+            "interrupt_response": True,
+        },
+        "input_audio_noise_reduction": {"type": "azure_deep_noise_suppression"},
+        "input_audio_echo_cancellation": {"type": "server_echo_cancellation"},
+        "voice": {"name": VOICE_LIVE_VOICE, "type": "azure-standard"},
+    }
+    # Native speech-to-speech model variant currently does not expose the same
+    # transcription options as the text-centric Lite models.
+    if "phi4-mm" not in model.lower():
+        session["input_audio_transcription"] = {
+            "model": "azure-speech",
+            "language": VOICE_LIVE_TRANSCRIPTION_LANGUAGE,
+        }
+    return {"type": "session.update", "session": session}
+
+
 def _session_config(variant: str, deployment: str) -> dict[str, Any]:
     """Match src/protocol.build_session_update so browser session = CLI session."""
     audio_input: dict[str, Any] = {
@@ -217,6 +300,10 @@ def get_config():
             "anamneseExtractInstructions": ANAMNESE_EXTRACT_PROMPT,
             "anamneseJsonSchema": ANAMNESE_JSON_SCHEMA,
             "anamneseSchemaName": ANAMNESE_SCHEMA_NAME,
+            # Voice Live (Speech in Foundry Tools)
+            "voiceLiveModels": VOICE_LIVE_MODELS,
+            "defaultVoiceLiveModel": DEFAULT_VOICE_LIVE_MODEL,
+            "voiceLiveGreeting": VOICE_LIVE_GREETING,
             # STT -> AOAI -> TTS pipeline config
             "chatDeployments": CHAT_DEPLOYMENTS,
             "defaultChatTier": DEFAULT_CHAT_TIER,
@@ -290,6 +377,86 @@ def get_speech_token():
     except Exception as exc:  # pragma: no cover - surfaced to client
         app.logger.exception("speech-token error")
         return jsonify({"error": str(exc)}), 500
+
+
+@sock.route("/api/voicelive/ws")
+def voicelive_ws(client):
+    """Relay browser signaling for Voice Live, injecting server-side session config."""
+    variant = _resolve_variant(request.args.get("variant"))
+    model = _resolve_voice_live_model(request.args.get("model"))
+    ws_url = _voice_live_ws_url(model)
+    app.logger.info(
+        "voicelive relay open variant=%s model=%s endpoint=%s",
+        variant,
+        model,
+        ws_url,
+    )
+
+    try:
+        upstream = ws_client.create_connection(
+            ws_url,
+            header=[f"Authorization: Bearer {_bearer_token()}"],
+            enable_multithread=True,
+            timeout=30,
+        )
+    except Exception as exc:
+        app.logger.exception("voicelive connect failed")
+        try:
+            client.send(json.dumps({"type": "error", "error": {"message": str(exc)}}))
+        except Exception:
+            pass
+        return
+
+    stop = threading.Event()
+
+    def _upstream_to_client() -> None:
+        while not stop.is_set():
+            try:
+                msg = upstream.recv()
+            except ws_client.WebSocketConnectionClosedException:
+                break
+            except Exception:
+                app.logger.exception("voicelive upstream recv failed")
+                break
+            if msg is None:
+                break
+            try:
+                if isinstance(msg, bytes):
+                    msg = msg.decode("utf-8", errors="ignore")
+                client.send(msg)
+            except Exception:
+                break
+        stop.set()
+
+    pump_thread = threading.Thread(target=_upstream_to_client, daemon=True)
+    pump_thread.start()
+
+    session_sent = False
+    try:
+        while not stop.is_set():
+            msg = client.receive()
+            if msg is None:
+                break
+            upstream.send(msg)
+            if session_sent:
+                continue
+            try:
+                evt = json.loads(msg)
+            except Exception:
+                evt = {}
+            if evt.get("type") == "rtc.call.sdp.create":
+                upstream.send(json.dumps(_voice_live_session_update(variant, model)))
+                session_sent = True
+    except Exception:
+        app.logger.exception("voicelive relay loop failed")
+    finally:
+        stop.set()
+        try:
+            upstream.close()
+        except Exception:
+            pass
+        pump_thread.join(timeout=1.0)
+        app.logger.info("voicelive relay closed")
 
 
 @app.post("/api/chat")

@@ -77,6 +77,49 @@ export class RealtimePricing {
 }
 
 /**
+ * Azure Speech Voice Live API pricing (Lite tier), USD per 1M tokens.
+ * Source: https://azure.microsoft.com/en-us/pricing/details/speech/
+ */
+export class VoiceLivePricing extends RealtimePricing {
+  static nano = new VoiceLivePricing(
+    "gpt-5-nano",
+    0.11,
+    0.04,
+    0.44,
+    15.0,
+    0.04,
+    25.0,
+  );
+
+  static phiMini = new VoiceLivePricing(
+    "phi4-mini",
+    0.11,
+    0.04,
+    0.44,
+    15.0,
+    0.04,
+    25.0,
+  );
+
+  static phiRealtime = new VoiceLivePricing(
+    "phi4-mm-realtime",
+    0.11,
+    0.04,
+    0.44,
+    4.0,
+    0.04,
+    25.0,
+  );
+
+  static forModel(model: string): VoiceLivePricing {
+    const m = (model || "").toLowerCase();
+    if (m.includes("phi4-mm")) return VoiceLivePricing.phiRealtime;
+    if (m.includes("phi4-mini")) return VoiceLivePricing.phiMini;
+    return VoiceLivePricing.nano;
+  }
+}
+
+/**
  * Pricing for the STT -> AOAI -> TTS pipeline chat (text) models.
  * USD per 1M tokens.
  */

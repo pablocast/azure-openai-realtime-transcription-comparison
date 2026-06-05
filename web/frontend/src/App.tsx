@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { RealtimeClient, type RealtimeHandlers, type SessionTotals } from "./realtime";
 import { PipelineClient, type PipelineTotals } from "./pipeline";
+import { VoiceLiveClient, type VoiceLiveTotals } from "./voicelive";
 import { fmtTokens, fmtUnitPrice, fmtUsd, type CostBreakdown } from "./costs";
 
 type SessionState = "idle" | "connecting" | "live" | "ended";
 type ChatRole = "user" | "assistant";
-type Mode = "realtime" | "pipeline";
+type Mode = "realtime" | "pipeline" | "voicelive";
+type CostTotals = SessionTotals | PipelineTotals | VoiceLiveTotals;
 
 /** Shared surface both clients expose, so the UI can drive either one. */
 type VoiceClient = {
   start(variant?: string, modelTier?: string, extractTier?: string): Promise<void>;
-  hangup(): SessionTotals | PipelineTotals;
+  hangup(): CostTotals;
   setAnamneseState(state: Record<string, unknown>): void;
 };
 
@@ -22,6 +24,7 @@ interface ModeOption {
 const MODE_OPTIONS: ModeOption[] = [
   { id: "realtime", label: "Realtime (speech-to-speech)" },
   { id: "pipeline", label: "Pipeline (STT → AOAI → TTS)" },
+  { id: "voicelive", label: "Voice Live API" },
 ];
 
 interface PromptOption {
@@ -51,6 +54,11 @@ const MODEL_OPTIONS: Record<Mode, ModelOption[]> = {
     { id: "mini", label: "gpt-5.4-mini" },
     { id: "gpt5mini", label: "gpt-5-mini" },
   ],
+  voicelive: [
+    { id: "gpt-5-nano", label: "gpt-5-nano" },
+    { id: "phi4-mini", label: "phi4-mini" },
+    { id: "phi4-mm-realtime", label: "phi4-mm-realtime" },
+  ],
 };
 
 interface ChatMessage {
@@ -78,7 +86,7 @@ export default function App() {
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [rows, setRows] = useState<TurnRow[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
-  const [costs, setCosts] = useState<SessionTotals | PipelineTotals | null>(null);
+  const [costs, setCosts] = useState<CostTotals | null>(null);
   const [mode, setMode] = useState<Mode>("realtime");
   const [promptVariant, setPromptVariant] = useState<string>(PROMPT_OPTIONS[0].id);
   const [modelTier, setModelTier] = useState<string>("full");
@@ -90,6 +98,13 @@ export default function App() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat]);
+
+  useEffect(() => {
+    const options = MODEL_OPTIONS[mode];
+    if (!options.some((opt) => opt.id === modelTier)) {
+      setModelTier(options[0]?.id ?? "");
+    }
+  }, [mode, modelTier]);
 
   const log = (m: string) =>
     setLogs((prev) => [...prev.slice(-50), `${new Date().toLocaleTimeString()}  ${m}`]);
@@ -171,7 +186,9 @@ export default function App() {
     const client: VoiceClient =
       mode === "pipeline"
         ? new PipelineClient(handlers)
-        : new RealtimeClient(handlers);
+        : mode === "voicelive"
+          ? new VoiceLiveClient(handlers)
+          : new RealtimeClient(handlers);
     clientRef.current = client;
     try {
       await client.start(promptVariant, modelTier, extractModelTier);
@@ -198,12 +215,14 @@ export default function App() {
             ? "Live Medical Anamnesis"
             : mode === "pipeline"
               ? "Pipeline conversation: STT → AOAI → TTS"
+              : mode === "voicelive"
+                ? "Voice Live conversation"
               : "Transcribing User Audio: Separate Transcribe Model vs. Realtime"}
         </h1>
         <span className={`status status-${state}`}>{state}</span>
       </header>
 
-      {promptVariant === "medical" ? (
+      {promptVariant === "medical" && mode === "pipeline" ? (
         <AnamnesePanel form={form} />
       ) : mode === "realtime" ? (
         <section className="compare">
@@ -237,7 +256,7 @@ export default function App() {
         </section>
       ) : null}
 
-      {promptVariant !== "medical" && (
+      {!(promptVariant === "medical" && mode === "pipeline") && (
         <section className="chat">
           <div className="chat-header">Conversation</div>
           <div className="chat-body">
@@ -383,12 +402,16 @@ interface CostSection {
 
 /** True for pipeline totals (which carry a `chat` breakdown). */
 function isPipelineTotals(
-  t: SessionTotals | PipelineTotals,
+  t: CostTotals,
 ): t is PipelineTotals {
   return (t as PipelineTotals).chat !== undefined;
 }
 
-function buildSections(totals: SessionTotals | PipelineTotals): CostSection[] {
+function isVoiceLiveTotals(t: CostTotals): t is VoiceLiveTotals {
+  return (t as VoiceLiveTotals).conversation !== undefined;
+}
+
+function buildSections(totals: CostTotals): CostSection[] {
   if (isPipelineTotals(totals)) {
     return [
       {
@@ -421,6 +444,17 @@ function buildSections(totals: SessionTotals | PipelineTotals): CostSection[] {
       },
     ];
   }
+  if (isVoiceLiveTotals(totals)) {
+    return [
+      {
+        key: "voicelive",
+        label: "Voice Live model · conversation",
+        sub: `${totals.pricingName} · audio in/out + text`,
+        total: totals.conversation.totalCost,
+        parts: totals.conversation.parts,
+      },
+    ];
+  }
   return [
     {
       key: "main",
@@ -446,7 +480,7 @@ function buildSections(totals: SessionTotals | PipelineTotals): CostSection[] {
   ];
 }
 
-function CostPanel({ totals }: { totals: SessionTotals | PipelineTotals }) {
+function CostPanel({ totals }: { totals: CostTotals }) {
   const sections = buildSections(totals);
 
   return (
