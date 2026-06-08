@@ -452,6 +452,17 @@ def voicelive_ws(client):
             try:
                 msg = upstream.recv()
             except ws_client.WebSocketConnectionClosedException:
+                # Azure closed the upstream WebSocket. Surface the close frame
+                # code/reason (e.g. session duration cap) for diagnostics.
+                close_frame = getattr(upstream, "close_frame", None)
+                if close_frame is not None:
+                    app.logger.info(
+                        "voicelive upstream closed by service: code=%s reason=%s",
+                        getattr(close_frame, "code", "?"),
+                        getattr(close_frame, "data", b"") or b"",
+                    )
+                else:
+                    app.logger.info("voicelive upstream closed by service")
                 break
             except Exception:
                 app.logger.exception("voicelive upstream recv failed")

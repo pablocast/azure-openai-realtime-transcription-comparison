@@ -57,6 +57,14 @@ const SAMPLE_RATE = 24000;
 /** Mic capture block size (frames) for the ScriptProcessor. */
 const CAPTURE_BUFFER = 4096;
 
+// ---- Auto-reconnect (service-side session cap is ~15 min) ----
+/** Max consecutive reconnect attempts before giving up. */
+const MAX_RECONNECT_ATTEMPTS = 6;
+/** First reconnect backoff (ms); doubles each attempt up to the max. */
+const RECONNECT_BASE_DELAY_MS = 500;
+/** Ceiling for the reconnect backoff (ms). */
+const RECONNECT_MAX_DELAY_MS = 8000;
+
 const EMPTY: CostBreakdown = { totalCost: 0, parts: {} };
 const SPECIAL_TOKEN_RE = /<\|[^|>]+\|>/g;
 /** Chat (text) pricing keyed by the model tier sent to /api/extract. */
@@ -138,9 +146,20 @@ export class VoiceLiveClient {
 
   private pricing: VoiceLivePricing = VoiceLivePricing.lite;
   private variant = "v1";
+  private model = "";
   private greeting = "";
   private greetingSent = false;
   private sessionReady = false;
+
+  // ---- Reconnect bookkeeping ----
+  /** True once the user hangs up, so onclose stops reconnecting. */
+  private intentionalClose = false;
+  /** Consecutive failed/auto reconnect attempts. */
+  private reconnectAttempts = 0;
+  /** Pending reconnect timer id (so hangup can cancel it). */
+  private reconnectTimer: number | null = null;
+  /** Set after a reconnect so session.updated reseeds context instead of greeting. */
+  private justReconnected = false;
 
   /** user audio item ids we've already shown a bubble for. */
   private seenUserItems = new Set<string>();
@@ -172,6 +191,8 @@ export class VoiceLiveClient {
 
   async start(variant?: string, modelTier?: string, extractTier?: string): Promise<void> {
     this.handlers.onStateChange("connecting");
+    this.intentionalClose = false;
+    this.reconnectAttempts = 0;
 
     const cfg = await fetchJson<VoiceLiveConfig>("/api/config");
     const allowedVariants =
@@ -191,40 +212,135 @@ export class VoiceLiveClient {
       modelTier && models.includes(modelTier)
         ? modelTier
         : cfg.defaultVoiceLiveModel || models[0] || "gpt-5-nano";
+    this.model = model;
     this.pricing = VoiceLivePricing.forModel(model);
 
     // ---- Mic capture: PCM16 @ 24 kHz mono ----
     await this.setupCapture();
 
     // ---- Open the relayed audio WebSocket ----
+    await this.openSocket(false);
+  }
+
+  /**
+   * Open (or reopen) the relayed Voice Live WebSocket. On a reconnect we keep
+   * the live mic capture running and skip the greeting; the backend re-injects
+   * the persona `session.update` on every fresh upstream connection.
+   */
+  private openSocket(isReconnect: boolean): Promise<void> {
     const params = new URLSearchParams();
     params.set("variant", this.variant);
-    params.set("model", model);
+    params.set("model", this.model);
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${proto}//${location.host}/api/voicelive/ws?${params.toString()}`;
 
-    await new Promise<void>((resolve, reject) => {
+    // Reset per-connection state. On a reconnect, suppress the greeting so the
+    // consultation resumes mid-flight rather than starting over.
+    this.sessionReady = false;
+    this.greetingSent = isReconnect;
+    this.justReconnected = isReconnect;
+
+    return new Promise<void>((resolve, reject) => {
       const ws = new WebSocket(wsUrl);
       this.ws = ws;
       ws.onopen = () => {
-        this.handlers.onLog(`Voice Live WebSocket open (model=${model})`);
+        this.handlers.onLog(
+          isReconnect
+            ? `Voice Live WebSocket reconnected (model=${this.model})`
+            : `Voice Live WebSocket open (model=${this.model})`,
+        );
+        this.reconnectAttempts = 0;
         this.handlers.onStateChange("live");
         resolve();
       };
       ws.onerror = () => {
         this.handlers.onLog("Voice Live WebSocket error");
+        // onclose fires right after and owns the reconnect decision.
         reject(new Error("Voice Live WebSocket connection failed"));
       };
-      ws.onclose = () => {
-        this.handlers.onLog("Voice Live WebSocket closed");
-        this.handlers.onStateChange("ended");
+      ws.onclose = (ev) => {
+        const code = ev.code;
+        const reason = ev.reason ? ` reason="${ev.reason}"` : "";
+        const clean = ev.wasClean ? "clean" : "abrupt";
+        this.handlers.onLog(
+          `Voice Live WebSocket closed (${clean}, code=${code}${reason})`,
+        );
+        this.stopPlayback();
+        if (this.intentionalClose) {
+          // The user hung up; hangup() owns the final state transition.
+          return;
+        }
+        // Service-side session cap (~15 min) or a transient drop: reconnect.
+        this.scheduleReconnect();
       };
       ws.onmessage = (ev) => this.handleEvent(ev.data);
     });
   }
 
+  /** Reconnect with exponential backoff after an unexpected close. */
+  private scheduleReconnect(): void {
+    if (this.intentionalClose || this.reconnectTimer !== null) return;
+    this.reconnectAttempts += 1;
+    if (this.reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
+      this.handlers.onLog(
+        `Voice Live reconnect gave up after ${MAX_RECONNECT_ATTEMPTS} attempts`,
+      );
+      this.handlers.onStateChange("ended");
+      return;
+    }
+    const delay = Math.min(
+      RECONNECT_BASE_DELAY_MS * 2 ** (this.reconnectAttempts - 1),
+      RECONNECT_MAX_DELAY_MS,
+    );
+    this.handlers.onLog(
+      `Voice Live reconnecting in ${(delay / 1000).toFixed(1)}s (attempt ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`,
+    );
+    this.handlers.onStateChange("connecting");
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = null;
+      // Errors here surface through onclose, which reschedules.
+      void this.openSocket(true).catch(() => { /* handled by onclose */ });
+    }, delay);
+  }
+
+  /**
+   * After a reconnect, hand the model a compact summary of what has already
+   * been collected so the doctor resumes instead of re-asking. Does not force a
+   * response; server VAD drives the next turn from the patient's voice.
+   */
+  private seedContextAfterReconnect(): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    let collected = "";
+    try { collected = JSON.stringify(this.anamneseState ?? {}); } catch { collected = ""; }
+    if (!collected || collected === "{}") return;
+    this.ws.send(
+      JSON.stringify({
+        type: "conversation.item.create",
+        item: {
+          type: "message",
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text:
+                "[CONTINUACIÓN DE LA CONSULTA] La sesión se reconectó tras una " +
+                "interrupción técnica. Datos ya recolectados (NO los vuelvas a " +
+                "preguntar; continúa donde quedaste): " +
+                collected,
+            },
+          ],
+        },
+      }),
+    );
+  }
+
   hangup(): VoiceLiveTotals {
     this.handlers.onLog("Hanging up...");
+    this.intentionalClose = true;
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.stopPlayback();
     try { this.processor?.disconnect(); } catch { /* ignore */ }
     try { this.micSource?.disconnect(); } catch { /* ignore */ }
@@ -241,6 +357,8 @@ export class VoiceLiveClient {
     this.playbackCtx = null;
     this.sessionReady = false;
     this.greetingSent = false;
+    this.justReconnected = false;
+    this.reconnectAttempts = 0;
     this.handlers.onStateChange("idle");
 
     const total =
@@ -391,8 +509,14 @@ export class VoiceLiveClient {
       case "session.updated": {
         // Session is configured (prompt, server VAD, voice). Safe to greet.
         this.sessionReady = true;
-        this.handlers.onLog("─── Conversation started ───");
-        this.sendGreeting();
+        if (this.justReconnected) {
+          this.justReconnected = false;
+          this.handlers.onLog("─── Conversation resumed ───");
+          this.seedContextAfterReconnect();
+        } else {
+          this.handlers.onLog("─── Conversation started ───");
+          this.sendGreeting();
+        }
         return;
       }
 
