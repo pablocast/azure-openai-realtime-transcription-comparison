@@ -48,6 +48,8 @@ so you can compare approaches, prompts, and model tiers without redeploying.
 | --- | --- | --- | --- |
 | **Realtime (speech-to-speech)** | WebRTC peer connection to Azure OpenAI Realtime | A single `gpt-realtime` model does STT + reasoning + TTS in one session. User-turn text comes from the model's own out-of-band (OOB) transcript. | Lowest-latency natural conversation; barge-in; the side-by-side transcription comparison. |
 | **Pipeline (STT → AOAI → TTS)** | Azure Speech SDK (WebSocket) + chat completions (SSE) | Decoupled stages: Azure Speech `SpeechRecognizer` (auto language ID) → Azure OpenAI chat completions → Azure Speech `SpeechSynthesizer` (locked voice). | Swapping models per stage, strict structured outputs, and full control over each step. |
+| **Voice Live** | Azure Voice Live realtime WebSocket, relayed through the backend | One Voice Live session does STT (`azure-speech`) + reasoning + neural TTS, with server VAD, noise suppression and echo cancellation handled by the service. The browser streams mic PCM up and plays the returned PCM; the persona `session.update` lives server-side. Anamnesis extraction is **decoupled** — it runs as a separate `/api/extract` call (see below). | A managed speech-to-speech stack with Azure neural voices, where extraction is kept independent of the conversation model. |
+
 
 ### 2. Prompt / use case
 
@@ -71,6 +73,71 @@ The pipeline mode also offers a third, lower-cost `gpt-5-mini` option
 
 The **Cost** panel breaks down token/character usage and price per source for whichever
 combination you pick, so you can compare quality, latency, and cost side by side.
+
+---
+
+## Anamnesis extraction over Voice Live
+
+In the **v3 — Medical Anamnesis** prompt, the panel on the right is a live,
+structured anamnesis that fills in as the consultation progresses. In **Voice
+Live** mode the spoken conversation and the structured extraction run on two
+independent paths, so the extraction never interferes with the realtime audio.
+
+### Why it's decoupled
+
+The Azure Voice Live realtime API does not accept `item_reference` in a
+`response.create` (unlike the WebRTC Realtime path, which can ask the model to
+re-emit a structured tool call out-of-band). So instead of extracting *inside*
+the voice session, Voice Live mode feeds the transcribed text to a separate,
+plain HTTP endpoint (`POST /api/extract`) that runs a strict `json_schema`
+chat completion. This is the same extraction backend the Pipeline mode uses.
+
+### Flow per turn
+
+1. **Audio relay.** The browser ([`web/frontend/src/voicelive.ts`](frontend/src/voicelive.ts))
+   captures mic audio as PCM16 @ 24 kHz and streams it to the backend
+   WebSocket relay (`/api/voicelive/ws`), which forwards it to the Azure Voice
+   Live realtime endpoint. The persona prompt, server VAD, voice and
+   transcription config are injected server-side via `session.update`
+   (`_voice_live_session_update` in [`web/backend/server.py`](backend/server.py)),
+   so they never live in the client.
+2. **Transcription.** Voice Live runs Azure Speech (`azure-speech`) input
+   transcription and emits
+   `conversation.item.input_audio_transcription.completed` for each finished
+   patient turn. The frontend uses that transcript both for the chat bubble and
+   to trigger extraction.
+3. **Extract call.** On each completed patient turn, `runExtract()` POSTs a
+   single user message to `/api/extract` containing:
+   - the **doctor's most recent utterance** (context — the source for plan,
+     vitals, exam and labs the doctor reads aloud),
+   - the **patient's answer** (the only source of patient-reported clinical
+     data),
+   - the **current accumulated anamnesis** as JSON (so the model reproduces and
+     extends it rather than dropping fields),
+   - **today's date** (to resolve ages and relative dates).
+4. **Strict schema response.** The backend injects the extraction system prompt
+   and calls Azure OpenAI chat completions with
+   `response_format = json_schema` (strict), enforcing the full anamnesis
+   shape (`ANAMNESE_JSON_SCHEMA`). It returns the **complete** object — `null`
+   for anything not yet known — plus token usage.
+5. **Merge + cost.** The frontend deep-merges the returned object into the live
+   panel (ignoring `null`s, deduping array entries) and adds the extraction's
+   token usage to the **Cost** panel under a separate "extract" line, priced by
+   the selected extraction model tier.
+
+Because extraction is just HTTP, you can pick its model tier independently of
+the voice model (e.g. a `gpt-realtime-mini` conversation with a `gpt-5-mini`
+extractor), and a slow or failed extraction never blocks or delays the spoken
+reply.
+
+### Resilience
+
+The Azure Voice Live session has a service-side maximum duration (around
+~15 minutes). When the upstream socket closes, the client logs the close
+code/reason and **auto-reconnects** with exponential backoff, re-injecting the
+session config and reseeding the already-collected anamnesis so a long
+consultation continues seamlessly. Because the structured state lives in the UI
+(and extraction is decoupled), no captured data is lost across a reconnect.
 
 ---
 

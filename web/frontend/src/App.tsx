@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { RealtimeClient, type RealtimeHandlers, type SessionTotals } from "./realtime";
 import { PipelineClient, type PipelineTotals } from "./pipeline";
+import { VoiceLiveClient, type VoiceLiveTotals } from "./voicelive";
 import { fmtTokens, fmtUnitPrice, fmtUsd, type CostBreakdown } from "./costs";
 
 type SessionState = "idle" | "connecting" | "live" | "ended";
 type ChatRole = "user" | "assistant";
-type Mode = "realtime" | "pipeline";
+type Mode = "realtime" | "pipeline" | "voicelive";
+type CostTotals = SessionTotals | PipelineTotals | VoiceLiveTotals;
 
 /** Shared surface both clients expose, so the UI can drive either one. */
 type VoiceClient = {
   start(variant?: string, modelTier?: string, extractTier?: string): Promise<void>;
-  hangup(): SessionTotals | PipelineTotals;
+  hangup(): CostTotals;
   setAnamneseState(state: Record<string, unknown>): void;
 };
 
@@ -22,6 +24,7 @@ interface ModeOption {
 const MODE_OPTIONS: ModeOption[] = [
   { id: "realtime", label: "Realtime (speech-to-speech)" },
   { id: "pipeline", label: "Pipeline (STT → AOAI → TTS)" },
+  { id: "voicelive", label: "Voice Live API" },
 ];
 
 interface PromptOption {
@@ -50,8 +53,21 @@ const MODEL_OPTIONS: Record<Mode, ModelOption[]> = {
     { id: "full", label: "gpt-5.4" },
     { id: "mini", label: "gpt-5.4-mini" },
     { id: "gpt5mini", label: "gpt-5-mini" },
+    { id: "gpt54nano", label: "gpt-5.4-nano" },
+  ],
+  voicelive: [
+    { id: "gpt-realtime", label: "Voice Live Pro · gpt-realtime" },
+    { id: "gpt-realtime-mini", label: "Voice Live Basic · gpt-realtime-mini" },
+    { id: "gpt-5-nano", label: "Voice Live Lite · gpt-5-nano" },
   ],
 };
+
+/** Anamnesis extraction tiers — GPT-5.4 family only. */
+const EXTRACT_MODEL_OPTIONS: ModelOption[] = [
+  { id: "full", label: "gpt-5.4" },
+  { id: "mini", label: "gpt-5.4-mini" },
+  { id: "gpt54nano", label: "gpt-5.4-nano" },
+];
 
 interface ChatMessage {
   id: string;
@@ -78,7 +94,7 @@ export default function App() {
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [rows, setRows] = useState<TurnRow[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
-  const [costs, setCosts] = useState<SessionTotals | PipelineTotals | null>(null);
+  const [costs, setCosts] = useState<CostTotals | null>(null);
   const [mode, setMode] = useState<Mode>("realtime");
   const [promptVariant, setPromptVariant] = useState<string>(PROMPT_OPTIONS[0].id);
   const [modelTier, setModelTier] = useState<string>("full");
@@ -90,6 +106,13 @@ export default function App() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat]);
+
+  useEffect(() => {
+    const options = MODEL_OPTIONS[mode];
+    if (!options.some((opt) => opt.id === modelTier)) {
+      setModelTier(options[0]?.id ?? "");
+    }
+  }, [mode, modelTier]);
 
   const log = (m: string) =>
     setLogs((prev) => [...prev.slice(-50), `${new Date().toLocaleTimeString()}  ${m}`]);
@@ -171,7 +194,9 @@ export default function App() {
     const client: VoiceClient =
       mode === "pipeline"
         ? new PipelineClient(handlers)
-        : new RealtimeClient(handlers);
+        : mode === "voicelive"
+          ? new VoiceLiveClient(handlers)
+          : new RealtimeClient(handlers);
     clientRef.current = client;
     try {
       await client.start(promptVariant, modelTier, extractModelTier);
@@ -189,6 +214,9 @@ export default function App() {
   };
 
   const inCall = state === "live" || state === "connecting";
+  const showAnamnesePanel =
+    promptVariant === "medical" &&
+    (mode === "pipeline" || mode === "realtime" || mode === "voicelive");
 
   return (
     <div className="app">
@@ -198,12 +226,14 @@ export default function App() {
             ? "Live Medical Anamnesis"
             : mode === "pipeline"
               ? "Pipeline conversation: STT → AOAI → TTS"
+              : mode === "voicelive"
+                ? "Voice Live conversation"
               : "Transcribing User Audio: Separate Transcribe Model vs. Realtime"}
         </h1>
         <span className={`status status-${state}`}>{state}</span>
       </header>
 
-      {promptVariant === "medical" ? (
+      {showAnamnesePanel ? (
         <AnamnesePanel form={form} />
       ) : mode === "realtime" ? (
         <section className="compare">
@@ -237,7 +267,7 @@ export default function App() {
         </section>
       ) : null}
 
-      {promptVariant !== "medical" && (
+      {!showAnamnesePanel && (
         <section className="chat">
           <div className="chat-header">Conversation</div>
           <div className="chat-body">
@@ -300,7 +330,7 @@ export default function App() {
             ))}
           </select>
         </label>
-        {mode === "pipeline" && promptVariant === "medical" && (
+        {(mode === "pipeline" || mode === "voicelive") && promptVariant === "medical" && (
           <label className="prompt-select" title="Choose the anamnesis extraction model">
             <span>Extraction model</span>
             <select
@@ -308,7 +338,7 @@ export default function App() {
               onChange={(e) => setExtractModelTier(e.target.value)}
               disabled={inCall}
             >
-              {MODEL_OPTIONS.pipeline.map((opt) => (
+              {EXTRACT_MODEL_OPTIONS.map((opt) => (
                 <option key={opt.id} value={opt.id}>
                   {opt.label}
                 </option>
@@ -383,12 +413,16 @@ interface CostSection {
 
 /** True for pipeline totals (which carry a `chat` breakdown). */
 function isPipelineTotals(
-  t: SessionTotals | PipelineTotals,
+  t: CostTotals,
 ): t is PipelineTotals {
   return (t as PipelineTotals).chat !== undefined;
 }
 
-function buildSections(totals: SessionTotals | PipelineTotals): CostSection[] {
+function isVoiceLiveTotals(t: CostTotals): t is VoiceLiveTotals {
+  return (t as VoiceLiveTotals).conversation !== undefined;
+}
+
+function buildSections(totals: CostTotals): CostSection[] {
   if (isPipelineTotals(totals)) {
     return [
       {
@@ -421,6 +455,24 @@ function buildSections(totals: SessionTotals | PipelineTotals): CostSection[] {
       },
     ];
   }
+  if (isVoiceLiveTotals(totals)) {
+    return [
+      {
+        key: "voicelive",
+        label: "Voice Live model · conversation",
+        sub: `${totals.pricingName} · audio in/out + text`,
+        total: totals.conversation.totalCost,
+        parts: totals.conversation.parts,
+      },
+      {
+        key: "extract",
+        label: "Chat model · anamnesis extraction",
+        sub: `${totals.extractPricingName} · structured JSON per turn`,
+        total: totals.extract.totalCost,
+        parts: totals.extract.parts,
+      },
+    ];
+  }
   return [
     {
       key: "main",
@@ -446,7 +498,7 @@ function buildSections(totals: SessionTotals | PipelineTotals): CostSection[] {
   ];
 }
 
-function CostPanel({ totals }: { totals: SessionTotals | PipelineTotals }) {
+function CostPanel({ totals }: { totals: CostTotals }) {
   const sections = buildSections(totals);
 
   return (
@@ -566,73 +618,76 @@ function deepMerge(
 const ANAMNESE_TOP_KEYS = [
   "identificacion",
   "motivo_consulta",
-  "historia_enfermedad_actual",
-  "antecedentes_personales",
+  "enfermedad_actual",
+  "antecedentes_patologicos",
+  "medicamentos_actuales",
   "antecedentes_familiares",
-  "habitos_estilo_vida",
-  "revision_sistemas",
-  "observaciones_adicionales",
-  "expectativas_plan",
+  "habitos",
+  "signos_vitales",
+  "examen_fisico",
+  "laboratorios",
+  "plan",
 ] as const;
 
 /** Reverse map: nested-key -> top-level section it belongs to.
  *  All nested keys in the schema are unique, so this is unambiguous. */
 const NESTED_KEY_TO_SECTION: Record<string, string> = {
   // identificacion
-  nombre: "identificacion",
+  nombre_completo: "identificacion",
+  documento_identidad: "identificacion",
   fecha_nacimiento: "identificacion",
   edad: "identificacion",
-  telefono: "identificacion",
+  sexo: "identificacion",
+  lugar_nacimiento: "identificacion",
+  estado_civil: "identificacion",
+  nivel_educativo: "identificacion",
+  ocupacion: "identificacion",
+  eps_aseguradora: "identificacion",
+  celular: "identificacion",
   email: "identificacion",
   direccion: "identificacion",
-  responsable_legal: "identificacion",
-  // historia_enfermedad_actual
-  inicio: "historia_enfermedad_actual",
-  evolucion: "historia_enfermedad_actual",
-  localizacion: "historia_enfermedad_actual",
-  intensidad_0_10: "historia_enfermedad_actual",
-  duracion_frecuencia: "historia_enfermedad_actual",
-  sintomas_asociados: "historia_enfermedad_actual",
-  factores_mejora: "historia_enfermedad_actual",
-  factores_empeoramiento: "historia_enfermedad_actual",
-  tratamientos_previos: "historia_enfermedad_actual",
-  impacto_rutina: "historia_enfermedad_actual",
-  // antecedentes_personales
-  enfermedades_previas: "antecedentes_personales",
-  cirugias_hospitalizaciones: "antecedentes_personales",
-  alergias: "antecedentes_personales",
-  medicamentos_en_uso: "antecedentes_personales",
-  vacunas: "antecedentes_personales",
-  // habitos_estilo_vida
-  sueno: "habitos_estilo_vida",
-  alimentacion_hidratacion: "habitos_estilo_vida",
-  actividad_fisica: "habitos_estilo_vida",
-  tabaquismo: "habitos_estilo_vida",
-  alcohol: "habitos_estilo_vida",
-  estres_psicosocial: "habitos_estilo_vida",
-  trabajo_rutina: "habitos_estilo_vida",
-  // revision_sistemas
-  respiratorio: "revision_sistemas",
-  cardiovascular: "revision_sistemas",
-  gastrointestinal: "revision_sistemas",
-  neurologico: "revision_sistemas",
-  genitourinario: "revision_sistemas",
-  otros: "revision_sistemas",
-  // observaciones_adicionales (vitals + physical exam)
-  presion_arterial: "observaciones_adicionales",
-  frecuencia_cardiaca: "observaciones_adicionales",
-  frecuencia_respiratoria: "observaciones_adicionales",
-  temperatura: "observaciones_adicionales",
-  saturacion_oxigeno: "observaciones_adicionales",
-  peso: "observaciones_adicionales",
-  talla: "observaciones_adicionales",
-  examen_fisico: "observaciones_adicionales",
-  notas: "observaciones_adicionales",
-  // expectativas_plan
-  expectativas_paciente: "expectativas_plan",
-  orientaciones_iniciales: "expectativas_plan",
-  conducta_remisiones: "expectativas_plan",
-  proximo_control: "expectativas_plan",
+  acompanante: "identificacion",
+  // enfermedad_actual
+  resumen: "enfermedad_actual",
+  tiempo_evolucion: "enfermedad_actual",
+  control_previo: "enfermedad_actual",
+  sintomas_actuales: "enfermedad_actual",
+  adherencia_tratamiento: "enfermedad_actual",
+  // antecedentes_patologicos
+  enfermedades_cronicas: "antecedentes_patologicos",
+  gastrointestinales: "antecedentes_patologicos",
+  cirugias: "antecedentes_patologicos",
+  hospitalizaciones: "antecedentes_patologicos",
+  alergias: "antecedentes_patologicos",
+  // habitos
+  tabaquismo: "habitos",
+  alcohol: "habitos",
+  alimentacion: "habitos",
+  actividad_fisica: "habitos",
+  suplementos: "habitos",
+  // signos_vitales
+  presion_arterial: "signos_vitales",
+  frecuencia_cardiaca: "signos_vitales",
+  frecuencia_respiratoria: "signos_vitales",
+  temperatura: "signos_vitales",
+  saturacion_oxigeno: "signos_vitales",
+  peso_kg: "signos_vitales",
+  talla_cm: "signos_vitales",
+  perimetro_abdominal_cm: "signos_vitales",
+  // examen_fisico
+  estado_general: "examen_fisico",
+  cardiopulmonar: "examen_fisico",
+  abdomen: "examen_fisico",
+  renal_ppl: "examen_fisico",
+  neurologico_pulsos: "examen_fisico",
+  hallazgos_relevantes: "examen_fisico",
+  // plan
+  diagnosticos: "plan",
+  ordenes_examenes: "plan",
+  remisiones: "plan",
+  ajuste_medicacion: "plan",
+  recomendaciones: "plan",
+  proximo_control: "plan",
 };
 
 /** Re-route any stray nested keys at the patch root into the correct section.
@@ -723,7 +778,7 @@ function computeAge(dob: unknown): number | null {
   return age;
 }
 
-type RowKind = "text" | "list" | "meds" | "bool_detail";
+type RowKind = "text" | "list" | "meds" | "bool_detail" | "famhist" | "labs";
 
 interface AnamneseRowDef {
   path: string;
@@ -742,13 +797,22 @@ const ANAMNESE_SECTIONS: AnamneseSectionDef[] = [
     key: "identificacion",
     label: "1. Identification",
     rows: [
-      { path: "identificacion.nombre", label: "Full name", kind: "text" },
+      { path: "identificacion.nombre_completo", label: "Full name", kind: "text" },
+      { path: "identificacion.documento_identidad", label: "ID document", kind: "text" },
       { path: "identificacion.fecha_nacimiento", label: "Date of birth", kind: "text" },
       { path: "identificacion.edad", label: "Age", kind: "text" },
-      { path: "identificacion.telefono", label: "Phone", kind: "text" },
+      { path: "identificacion.sexo", label: "Sex", kind: "text" },
+      { path: "identificacion.lugar_nacimiento", label: "Place of birth", kind: "text" },
+      { path: "identificacion.estado_civil", label: "Marital status", kind: "text" },
+      { path: "identificacion.nivel_educativo", label: "Education", kind: "text" },
+      { path: "identificacion.ocupacion", label: "Occupation", kind: "text" },
+      { path: "identificacion.eps_aseguradora", label: "Insurer / EPS", kind: "text" },
+      { path: "identificacion.celular", label: "Mobile", kind: "text" },
       { path: "identificacion.email", label: "Email", kind: "text" },
       { path: "identificacion.direccion", label: "Address", kind: "text" },
-      { path: "identificacion.responsable_legal", label: "Legal guardian", kind: "text" },
+      { path: "identificacion.acompanante.nombre", label: "Companion", kind: "text" },
+      { path: "identificacion.acompanante.parentesco", label: "Companion relation", kind: "text" },
+      { path: "identificacion.acompanante.telefono", label: "Companion phone", kind: "text" },
     ],
   },
   {
@@ -757,85 +821,89 @@ const ANAMNESE_SECTIONS: AnamneseSectionDef[] = [
     rows: [{ path: "motivo_consulta", label: "Reason for visit", kind: "text" }],
   },
   {
-    key: "historia_enfermedad_actual",
-    label: "3. History of present illness",
+    key: "enfermedad_actual",
+    label: "3. Present illness",
     rows: [
-      { path: "historia_enfermedad_actual.inicio", label: "Onset", kind: "text" },
-      { path: "historia_enfermedad_actual.evolucion", label: "Evolution", kind: "text" },
-      { path: "historia_enfermedad_actual.localizacion", label: "Location", kind: "text" },
-      { path: "historia_enfermedad_actual.intensidad_0_10", label: "Intensity (0–10)", kind: "text" },
-      { path: "historia_enfermedad_actual.duracion_frecuencia", label: "Duration / frequency", kind: "text" },
-      { path: "historia_enfermedad_actual.sintomas_asociados", label: "Associated symptoms", kind: "text" },
-      { path: "historia_enfermedad_actual.factores_mejora", label: "Relieving factors", kind: "text" },
-      { path: "historia_enfermedad_actual.factores_empeoramiento", label: "Aggravating factors", kind: "text" },
-      { path: "historia_enfermedad_actual.tratamientos_previos", label: "Prior treatments", kind: "text" },
-      { path: "historia_enfermedad_actual.impacto_rutina", label: "Impact on routine", kind: "text" },
+      { path: "enfermedad_actual.resumen", label: "Summary", kind: "text" },
+      { path: "enfermedad_actual.tiempo_evolucion", label: "Time of evolution", kind: "text" },
+      { path: "enfermedad_actual.control_previo", label: "Previous control", kind: "text" },
+      { path: "enfermedad_actual.sintomas_actuales", label: "Current symptoms", kind: "text" },
+      { path: "enfermedad_actual.adherencia_tratamiento", label: "Treatment adherence", kind: "text" },
     ],
   },
   {
-    key: "antecedentes_personales",
+    key: "antecedentes_patologicos",
     label: "4. Past medical history",
     rows: [
-      { path: "antecedentes_personales.enfermedades_previas", label: "Previous conditions", kind: "list" },
-      { path: "antecedentes_personales.cirugias_hospitalizaciones", label: "Surgeries / hospitalizations", kind: "list" },
-      { path: "antecedentes_personales.alergias", label: "Allergies", kind: "list" },
-      { path: "antecedentes_personales.medicamentos_en_uso", label: "Current medications", kind: "meds" },
-      { path: "antecedentes_personales.vacunas", label: "Vaccinations", kind: "text" },
+      { path: "antecedentes_patologicos.enfermedades_cronicas", label: "Chronic conditions", kind: "list" },
+      { path: "antecedentes_patologicos.gastrointestinales", label: "Gastrointestinal", kind: "text" },
+      { path: "antecedentes_patologicos.cirugias", label: "Surgeries", kind: "list" },
+      { path: "antecedentes_patologicos.hospitalizaciones", label: "Hospitalizations", kind: "list" },
+      { path: "antecedentes_patologicos.alergias", label: "Allergies", kind: "list" },
     ],
+  },
+  {
+    key: "medicamentos_actuales",
+    label: "5. Current medications",
+    rows: [{ path: "medicamentos_actuales", label: "Medications", kind: "meds" }],
   },
   {
     key: "antecedentes_familiares",
-    label: "5. Family history",
-    rows: [{ path: "antecedentes_familiares", label: "Family history", kind: "text" }],
+    label: "6. Family history",
+    rows: [{ path: "antecedentes_familiares", label: "Family history", kind: "famhist" }],
   },
   {
-    key: "habitos_estilo_vida",
-    label: "6. Lifestyle & habits",
+    key: "habitos",
+    label: "7. Lifestyle & habits",
     rows: [
-      { path: "habitos_estilo_vida.sueno", label: "Sleep", kind: "text" },
-      { path: "habitos_estilo_vida.alimentacion_hidratacion", label: "Diet & hydration", kind: "text" },
-      { path: "habitos_estilo_vida.actividad_fisica", label: "Physical activity", kind: "text" },
-      { path: "habitos_estilo_vida.tabaquismo", label: "Smoking", kind: "bool_detail" },
-      { path: "habitos_estilo_vida.alcohol", label: "Alcohol", kind: "bool_detail" },
-      { path: "habitos_estilo_vida.estres_psicosocial", label: "Stress / psychosocial", kind: "text" },
-      { path: "habitos_estilo_vida.trabajo_rutina", label: "Work / routine", kind: "text" },
+      { path: "habitos.tabaquismo", label: "Smoking", kind: "bool_detail" },
+      { path: "habitos.alcohol", label: "Alcohol", kind: "bool_detail" },
+      { path: "habitos.alimentacion", label: "Diet", kind: "text" },
+      { path: "habitos.actividad_fisica", label: "Physical activity", kind: "text" },
+      { path: "habitos.suplementos", label: "Supplements", kind: "list" },
     ],
   },
   {
-    key: "revision_sistemas",
-    label: "7. Review of systems",
+    key: "signos_vitales",
+    label: "8. Vital signs",
     rows: [
-      { path: "revision_sistemas.respiratorio", label: "Respiratory", kind: "text" },
-      { path: "revision_sistemas.cardiovascular", label: "Cardiovascular", kind: "text" },
-      { path: "revision_sistemas.gastrointestinal", label: "Gastrointestinal", kind: "text" },
-      { path: "revision_sistemas.neurologico", label: "Neurological", kind: "text" },
-      { path: "revision_sistemas.genitourinario", label: "Genitourinary", kind: "text" },
-      { path: "revision_sistemas.otros", label: "Other", kind: "text" },
+      { path: "signos_vitales.presion_arterial", label: "Blood pressure", kind: "text" },
+      { path: "signos_vitales.frecuencia_cardiaca", label: "Heart rate", kind: "text" },
+      { path: "signos_vitales.frecuencia_respiratoria", label: "Respiratory rate", kind: "text" },
+      { path: "signos_vitales.temperatura", label: "Temperature", kind: "text" },
+      { path: "signos_vitales.saturacion_oxigeno", label: "Oxygen saturation", kind: "text" },
+      { path: "signos_vitales.peso_kg", label: "Weight", kind: "text" },
+      { path: "signos_vitales.talla_cm", label: "Height", kind: "text" },
+      { path: "signos_vitales.perimetro_abdominal_cm", label: "Waist circumference", kind: "text" },
     ],
   },
   {
-    key: "observaciones_adicionales",
-    label: "8. Additional observations",
+    key: "examen_fisico",
+    label: "9. Physical exam",
     rows: [
-      { path: "observaciones_adicionales.presion_arterial", label: "Blood pressure", kind: "text" },
-      { path: "observaciones_adicionales.frecuencia_cardiaca", label: "Heart rate", kind: "text" },
-      { path: "observaciones_adicionales.frecuencia_respiratoria", label: "Respiratory rate", kind: "text" },
-      { path: "observaciones_adicionales.temperatura", label: "Temperature", kind: "text" },
-      { path: "observaciones_adicionales.saturacion_oxigeno", label: "Oxygen saturation", kind: "text" },
-      { path: "observaciones_adicionales.peso", label: "Weight", kind: "text" },
-      { path: "observaciones_adicionales.talla", label: "Height", kind: "text" },
-      { path: "observaciones_adicionales.examen_fisico", label: "Physical exam", kind: "text" },
-      { path: "observaciones_adicionales.notas", label: "Other notes", kind: "text" },
+      { path: "examen_fisico.estado_general", label: "General state", kind: "text" },
+      { path: "examen_fisico.cardiopulmonar", label: "Cardiopulmonary", kind: "text" },
+      { path: "examen_fisico.abdomen", label: "Abdomen", kind: "text" },
+      { path: "examen_fisico.renal_ppl", label: "Renal (PPL)", kind: "text" },
+      { path: "examen_fisico.neurologico_pulsos", label: "Neuro / pulses", kind: "text" },
+      { path: "examen_fisico.hallazgos_relevantes", label: "Relevant findings", kind: "text" },
     ],
   },
   {
-    key: "expectativas_plan",
-    label: "9. Expectations & plan",
+    key: "laboratorios",
+    label: "10. Labs & tests",
+    rows: [{ path: "laboratorios", label: "Lab results", kind: "labs" }],
+  },
+  {
+    key: "plan",
+    label: "11. Plan",
     rows: [
-      { path: "expectativas_plan.expectativas_paciente", label: "Patient expectations", kind: "text" },
-      { path: "expectativas_plan.orientaciones_iniciales", label: "Initial guidance", kind: "text" },
-      { path: "expectativas_plan.conducta_remisiones", label: "Plan / referrals", kind: "text" },
-      { path: "expectativas_plan.proximo_control", label: "Next follow-up", kind: "text" },
+      { path: "plan.diagnosticos", label: "Diagnoses", kind: "list" },
+      { path: "plan.ordenes_examenes", label: "Ordered tests", kind: "list" },
+      { path: "plan.remisiones", label: "Referrals", kind: "list" },
+      { path: "plan.ajuste_medicacion", label: "Medication change", kind: "text" },
+      { path: "plan.recomendaciones", label: "Recommendations", kind: "text" },
+      { path: "plan.proximo_control", label: "Next follow-up", kind: "text" },
     ],
   },
 ];
@@ -872,7 +940,36 @@ function renderValue(value: unknown, kind: RowKind): ReactNode {
           <li key={i}>
             <strong>{m?.nombre ?? "—"}</strong>
             {m?.dosis ? ` · ${m.dosis}` : ""}
-            {m?.horario ? ` · ${m.horario}` : ""}
+            {m?.frecuencia ? ` · ${m.frecuencia}` : ""}
+            {m?.indicacion ? ` · ${m.indicacion}` : ""}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  if (kind === "famhist") {
+    if (!Array.isArray(value) || value.length === 0) return empty;
+    return (
+      <ul className="anamnese-meds">
+        {value.map((f: any, i) => (
+          <li key={i}>
+            <strong>{f?.parentesco ?? "—"}</strong>
+            {f?.condicion ? ` · ${f.condicion}` : ""}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  if (kind === "labs") {
+    if (!Array.isArray(value) || value.length === 0) return empty;
+    return (
+      <ul className="anamnese-meds">
+        {value.map((l: any, i) => (
+          <li key={i}>
+            <strong>{l?.prueba ?? "—"}</strong>
+            {l?.valor ? ` · ${l.valor}` : ""}
+            {l?.unidad ? ` ${l.unidad}` : ""}
+            {l?.interpretacion ? ` · ${l.interpretacion}` : ""}
           </li>
         ))}
       </ul>

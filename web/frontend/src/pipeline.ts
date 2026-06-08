@@ -59,6 +59,7 @@ const CHAT_PRICING_BY_TIER: Record<string, ChatPricing> = {
   full: ChatPricing.full,
   mini: ChatPricing.mini,
   gpt5mini: ChatPricing.gpt5mini,
+  gpt54nano: ChatPricing.gpt54nano,
 };
 /** Token-auth lifetime is ~10 min; refresh comfortably before expiry. */
 const TOKEN_REFRESH_MS = 8 * 60 * 1000;
@@ -398,7 +399,7 @@ export class PipelineClient {
     const stateJson = JSON.stringify(this.anamneseState ?? {});
     const today = new Date().toISOString().slice(0, 10);
     const content =
-      `DOCTOR'S MOST RECENT UTTERANCE (context; source for expectativas_plan):\n` +
+      `DOCTOR'S MOST RECENT UTTERANCE (context; source for plan, vitals, exam, labs):\n` +
       `"${this.lastAssistantUtterance}"\n\n` +
       `PATIENT'S ANSWER (clinical data comes ONLY from here):\n` +
       `"${this.lastUserText}"\n\n` +

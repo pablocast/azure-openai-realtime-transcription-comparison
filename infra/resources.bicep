@@ -8,6 +8,7 @@ param azureOpenAiTranscriptionModel string
 param azureOpenAiChatDeployment string = ''
 param azureOpenAiMiniChatDeployment string = ''
 param azureOpenAiGpt5MiniChatDeployment string = ''
+param azureOpenAiGpt54NanoChatDeployment string = ''
 param speechEndpoint string = ''
 param speechResourceId string = ''
 param realtimeVoice string
@@ -126,6 +127,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'AZURE_OPENAI_CHAT_DEPLOYMENT_NAME', value: azureOpenAiChatDeployment }
             { name: 'AZURE_OPENAI_MINI_CHAT_DEPLOYMENT_NAME', value: azureOpenAiMiniChatDeployment }
             { name: 'AZURE_OPENAI_GPT5_MINI_CHAT_DEPLOYMENT_NAME', value: azureOpenAiGpt5MiniChatDeployment }
+            { name: 'AZURE_OPENAI_GPT5_4_NANO_CHAT_DEPLOYMENT_NAME', value: azureOpenAiGpt54NanoChatDeployment }
             { name: 'AZURE_SPEECH_ENDPOINT', value: speechEndpoint }
             { name: 'AZURE_SPEECH_RESOURCE_ID', value: speechResourceId }
             { name: 'REALTIME_VOICE', value: realtimeVoice }

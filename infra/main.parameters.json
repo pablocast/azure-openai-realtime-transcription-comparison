@@ -44,6 +44,15 @@
     "transcriptionModelVersion": {
       "value": "${AZURE_OPENAI_TRANSCRIPTION_MODEL_VERSION=2025-03-20}"
     },
+    "gpt54NanoChatDeploymentName": {
+      "value": "${AZURE_OPENAI_GPT5_4_NANO_CHAT_DEPLOYMENT_NAME=gpt-5.4-nano}"
+    },
+    "gpt54NanoChatModelName": {
+      "value": "${AZURE_OPENAI_GPT5_4_NANO_CHAT_MODEL_NAME=gpt-5.4-nano}"
+    },
+    "gpt54NanoChatModelVersion": {
+      "value": "${AZURE_OPENAI_GPT5_4_NANO_CHAT_MODEL_VERSION=2025-11-01}"
+    },
     "modelCapacity": {
       "value": "${AZURE_OPENAI_MODEL_CAPACITY=100}"
     },

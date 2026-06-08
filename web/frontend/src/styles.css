@@ -143,21 +143,33 @@ body {
 
 .controls {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 12px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
 }
 .prompt-select {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
   color: var(--text);
 }
+.prompt-select > span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  white-space: nowrap;
+}
 .prompt-select select {
-  padding: 8px 12px;
-  border-radius: 999px;
+  min-width: 220px;
+  padding: 9px 12px;
+  border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--panel);
   font-size: 14px;
@@ -167,7 +179,8 @@ body {
 .btn {
   border: none;
   cursor: pointer;
-  padding: 12px 28px;
+  padding: 11px 20px;
+  min-width: 116px;
   border-radius: 999px;
   font-size: 15px;
   font-weight: 600;
@@ -197,6 +210,32 @@ body {
 
 @media (max-width: 720px) {
   .compare { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 900px) {
+  .controls {
+    justify-content: center;
+  }
+  .prompt-select select {
+    min-width: 180px;
+  }
+}
+
+@media (max-width: 600px) {
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .prompt-select {
+    width: 100%;
+  }
+  .prompt-select select {
+    min-width: 0;
+    width: 100%;
+  }
+  .btn {
+    width: 100%;
+  }
 }
 
 /* Cost summary panel ---------------------------------------------------- */

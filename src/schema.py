@@ -10,12 +10,13 @@ ANAMNESE_SCHEMA_NAME = "anamnese_extract"
 # JSON Schema
 # ---------------------------------------------------------------------------
 #
-# Designed for Azure OpenAI Realtime structured output (``strict: true``):
+# General-purpose anamnesis, valid for any adult patient (male or female).
+# Designed for Azure OpenAI structured output (``strict: true``):
 #   - Every property listed in ``required``.
 #   - ``additionalProperties: false`` on every object.
 #   - Optional values modeled as nullable unions (e.g. ``["string", "null"]``).
-#   - Cumulative array fields (alergias, medicamentos_en_uso, ...) are
-#     replaced wholesale by the UI on each turn (see ANAMNESE_EXTRACT_PROMPT).
+#   - Cumulative array fields (medicamentos_actuales, laboratorios, ...) are
+#     appended + deduped by the UI on each turn.
 #
 ANAMNESE_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -23,13 +24,15 @@ ANAMNESE_JSON_SCHEMA: dict[str, Any] = {
     "required": [
         "identificacion",
         "motivo_consulta",
-        "historia_enfermedad_actual",
-        "antecedentes_personales",
+        "enfermedad_actual",
+        "antecedentes_patologicos",
+        "medicamentos_actuales",
         "antecedentes_familiares",
-        "habitos_estilo_vida",
-        "revision_sistemas",
-        "observaciones_adicionales",
-        "expectativas_plan",
+        "habitos",
+        "signos_vitales",
+        "examen_fisico",
+        "laboratorios",
+        "plan",
     ],
     "properties": {
         # 1) Identificación
@@ -37,16 +40,24 @@ ANAMNESE_JSON_SCHEMA: dict[str, Any] = {
             "type": "object",
             "additionalProperties": False,
             "required": [
-                "nombre",
+                "nombre_completo",
+                "documento_identidad",
                 "fecha_nacimiento",
                 "edad",
-                "telefono",
+                "sexo",
+                "lugar_nacimiento",
+                "estado_civil",
+                "nivel_educativo",
+                "ocupacion",
+                "eps_aseguradora",
+                "celular",
                 "email",
                 "direccion",
-                "responsable_legal",
+                "acompanante",
             ],
             "properties": {
-                "nombre": {"type": ["string", "null"]},
+                "nombre_completo": {"type": ["string", "null"]},
+                "documento_identidad": {"type": ["string", "null"]},
                 "fecha_nacimiento": {
                     "type": ["string", "null"],
                     "description": (
@@ -59,64 +70,73 @@ ANAMNESE_JSON_SCHEMA: dict[str, Any] = {
                     "minimum": 0,
                     "maximum": 130,
                 },
-                "telefono": {"type": ["string", "null"]},
+                "sexo": {
+                    "type": ["string", "null"],
+                    "description": "masculino | femenino | otro",
+                },
+                "lugar_nacimiento": {"type": ["string", "null"]},
+                "estado_civil": {"type": ["string", "null"]},
+                "nivel_educativo": {"type": ["string", "null"]},
+                "ocupacion": {"type": ["string", "null"]},
+                "eps_aseguradora": {"type": ["string", "null"]},
+                "celular": {"type": ["string", "null"]},
                 "email": {"type": ["string", "null"]},
                 "direccion": {"type": ["string", "null"]},
-                "responsable_legal": {"type": ["string", "null"]},
+                "acompanante": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["nombre", "parentesco", "telefono"],
+                    "properties": {
+                        "nombre": {"type": ["string", "null"]},
+                        "parentesco": {"type": ["string", "null"]},
+                        "telefono": {"type": ["string", "null"]},
+                    },
+                },
             },
         },
         # 2) Motivo de consulta
         "motivo_consulta": {"type": ["string", "null"]},
-        # 3) Historia de la enfermedad actual
-        "historia_enfermedad_actual": {
+        # 3) Enfermedad actual
+        "enfermedad_actual": {
             "type": "object",
             "additionalProperties": False,
             "required": [
-                "inicio",
-                "evolucion",
-                "localizacion",
-                "intensidad_0_10",
-                "duracion_frecuencia",
-                "sintomas_asociados",
-                "factores_mejora",
-                "factores_empeoramiento",
-                "tratamientos_previos",
-                "impacto_rutina",
+                "resumen",
+                "tiempo_evolucion",
+                "control_previo",
+                "sintomas_actuales",
+                "adherencia_tratamiento",
             ],
             "properties": {
-                "inicio": {"type": ["string", "null"]},
-                "evolucion": {"type": ["string", "null"]},
-                "localizacion": {"type": ["string", "null"]},
-                "intensidad_0_10": {
-                    "type": ["integer", "null"],
-                    "minimum": 0,
-                    "maximum": 10,
-                },
-                "duracion_frecuencia": {"type": ["string", "null"]},
-                "sintomas_asociados": {"type": ["string", "null"]},
-                "factores_mejora": {"type": ["string", "null"]},
-                "factores_empeoramiento": {"type": ["string", "null"]},
-                "tratamientos_previos": {"type": ["string", "null"]},
-                "impacto_rutina": {"type": ["string", "null"]},
+                "resumen": {"type": ["string", "null"]},
+                "tiempo_evolucion": {"type": ["string", "null"]},
+                "control_previo": {"type": ["string", "null"]},
+                "sintomas_actuales": {"type": ["string", "null"]},
+                "adherencia_tratamiento": {"type": ["string", "null"]},
             },
         },
-        # 4) Antecedentes personales
-        "antecedentes_personales": {
+        # 4) Antecedentes patológicos
+        "antecedentes_patologicos": {
             "type": "object",
             "additionalProperties": False,
             "required": [
-                "enfermedades_previas",
-                "cirugias_hospitalizaciones",
+                "enfermedades_cronicas",
+                "gastrointestinales",
+                "cirugias",
+                "hospitalizaciones",
                 "alergias",
-                "medicamentos_en_uso",
-                "vacunas",
             ],
             "properties": {
-                "enfermedades_previas": {
+                "enfermedades_cronicas": {
                     "type": "array",
                     "items": {"type": "string"},
                 },
-                "cirugias_hospitalizaciones": {
+                "gastrointestinales": {"type": ["string", "null"]},
+                "cirugias": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "hospitalizaciones": {
                     "type": "array",
                     "items": {"type": "string"},
                 },
@@ -124,41 +144,48 @@ ANAMNESE_JSON_SCHEMA: dict[str, Any] = {
                     "type": "array",
                     "items": {"type": "string"},
                 },
-                "medicamentos_en_uso": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "additionalProperties": False,
-                        "required": ["nombre", "dosis", "horario"],
-                        "properties": {
-                            "nombre": {"type": "string"},
-                            "dosis": {"type": ["string", "null"]},
-                            "horario": {"type": ["string", "null"]},
-                        },
-                    },
-                },
-                "vacunas": {"type": ["string", "null"]},
             },
         },
-        # 5) Antecedentes familiares
-        "antecedentes_familiares": {"type": ["string", "null"]},
-        # 6) Hábitos y estilo de vida
-        "habitos_estilo_vida": {
+        # 5) Medicamentos actuales
+        "medicamentos_actuales": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["nombre", "dosis", "frecuencia", "indicacion"],
+                "properties": {
+                    "nombre": {"type": "string"},
+                    "dosis": {"type": ["string", "null"]},
+                    "frecuencia": {"type": ["string", "null"]},
+                    "indicacion": {"type": ["string", "null"]},
+                },
+            },
+        },
+        # 6) Antecedentes familiares
+        "antecedentes_familiares": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["parentesco", "condicion"],
+                "properties": {
+                    "parentesco": {"type": "string"},
+                    "condicion": {"type": "string"},
+                },
+            },
+        },
+        # 7) Hábitos y estilo de vida
+        "habitos": {
             "type": "object",
             "additionalProperties": False,
             "required": [
-                "sueno",
-                "alimentacion_hidratacion",
-                "actividad_fisica",
                 "tabaquismo",
                 "alcohol",
-                "estres_psicosocial",
-                "trabajo_rutina",
+                "alimentacion",
+                "actividad_fisica",
+                "suplementos",
             ],
             "properties": {
-                "sueno": {"type": ["string", "null"]},
-                "alimentacion_hidratacion": {"type": ["string", "null"]},
-                "actividad_fisica": {"type": ["string", "null"]},
                 "tabaquismo": {
                     "type": "object",
                     "additionalProperties": False,
@@ -177,35 +204,17 @@ ANAMNESE_JSON_SCHEMA: dict[str, Any] = {
                         "detalle": {"type": ["string", "null"]},
                     },
                 },
-                "estres_psicosocial": {"type": ["string", "null"]},
-                "trabajo_rutina": {"type": ["string", "null"]},
+                "alimentacion": {"type": ["string", "null"]},
+                "actividad_fisica": {"type": ["string", "null"]},
+                "suplementos": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
             },
         },
-        # 7) Revisión por sistemas
-        "revision_sistemas": {
-            "type": "object",
-            "additionalProperties": False,
-            "required": [
-                "respiratorio",
-                "cardiovascular",
-                "gastrointestinal",
-                "neurologico",
-                "genitourinario",
-                "otros",
-            ],
-            "properties": {
-                "respiratorio": {"type": ["string", "null"]},
-                "cardiovascular": {"type": ["string", "null"]},
-                "gastrointestinal": {"type": ["string", "null"]},
-                "neurologico": {"type": ["string", "null"]},
-                "genitourinario": {"type": ["string", "null"]},
-                "otros": {"type": ["string", "null"]},
-            },
-        },
-        # 8) Observaciones adicionales: signos vitales y hallazgos al
-        #    examen físico, como campos estructurados (cada valor es texto
-        #    libre para preservar unidades, p.ej. "160/60", "80 lpm").
-        "observaciones_adicionales": {
+        # 8) Signos vitales (cada valor es texto libre para preservar unidades,
+        #    p.ej. "125/85 mmHg", "75 lpm").
+        "signos_vitales": {
             "type": "object",
             "additionalProperties": False,
             "required": [
@@ -214,19 +223,18 @@ ANAMNESE_JSON_SCHEMA: dict[str, Any] = {
                 "frecuencia_respiratoria",
                 "temperatura",
                 "saturacion_oxigeno",
-                "peso",
-                "talla",
-                "examen_fisico",
-                "notas",
+                "peso_kg",
+                "talla_cm",
+                "perimetro_abdominal_cm",
             ],
             "properties": {
                 "presion_arterial": {
                     "type": ["string", "null"],
-                    "description": "Sistólica/diastólica, p.ej. '120/80 mmHg'.",
+                    "description": "Sistólica/diastólica, p.ej. '125/85 mmHg'.",
                 },
                 "frecuencia_cardiaca": {
                     "type": ["string", "null"],
-                    "description": "Latidos por minuto, p.ej. '78 lpm'.",
+                    "description": "Latidos por minuto, p.ej. '75 lpm'.",
                 },
                 "frecuencia_respiratoria": {
                     "type": ["string", "null"],
@@ -234,44 +242,92 @@ ANAMNESE_JSON_SCHEMA: dict[str, Any] = {
                 },
                 "temperatura": {
                     "type": ["string", "null"],
-                    "description": "Temperatura corporal, p.ej. '36.8 °C'.",
+                    "description": "Temperatura corporal, p.ej. '37 °C'.",
                 },
                 "saturacion_oxigeno": {
                     "type": ["string", "null"],
-                    "description": "Saturación de oxígeno, p.ej. '98%'.",
+                    "description": "Saturación de oxígeno, p.ej. '95%'.",
                 },
-                "peso": {
+                "peso_kg": {
                     "type": ["string", "null"],
-                    "description": "Peso, p.ej. '72 kg'.",
+                    "description": "Peso, p.ej. '53 kg'.",
                 },
-                "talla": {
+                "talla_cm": {
                     "type": ["string", "null"],
-                    "description": "Talla, p.ej. '170 cm'.",
+                    "description": "Talla, p.ej. '160 cm'.",
                 },
-                "examen_fisico": {
+                "perimetro_abdominal_cm": {
                     "type": ["string", "null"],
-                    "description": "Hallazgos relevantes al examen físico.",
-                },
-                "notas": {
-                    "type": ["string", "null"],
-                    "description": "Cualquier otra observación que no encaje en los campos anteriores.",
+                    "description": "Perímetro abdominal, p.ej. '84 cm'.",
                 },
             },
         },
-        # 9) Expectativas y plan inicial
-        "expectativas_plan": {
+        # 9) Examen físico
+        "examen_fisico": {
             "type": "object",
             "additionalProperties": False,
             "required": [
-                "expectativas_paciente",
-                "orientaciones_iniciales",
-                "conducta_remisiones",
+                "estado_general",
+                "cardiopulmonar",
+                "abdomen",
+                "renal_ppl",
+                "neurologico_pulsos",
+                "hallazgos_relevantes",
+            ],
+            "properties": {
+                "estado_general": {"type": ["string", "null"]},
+                "cardiopulmonar": {"type": ["string", "null"]},
+                "abdomen": {"type": ["string", "null"]},
+                "renal_ppl": {
+                    "type": ["string", "null"],
+                    "description": "Puño-percusión lumbar / hallazgos renales.",
+                },
+                "neurologico_pulsos": {"type": ["string", "null"]},
+                "hallazgos_relevantes": {"type": ["string", "null"]},
+            },
+        },
+        # 10) Laboratorios y exámenes
+        "laboratorios": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["prueba", "valor", "unidad", "interpretacion"],
+                "properties": {
+                    "prueba": {"type": "string"},
+                    "valor": {"type": "string"},
+                    "unidad": {"type": ["string", "null"]},
+                    "interpretacion": {"type": ["string", "null"]},
+                },
+            },
+        },
+        # 11) Plan (autoría del médico)
+        "plan": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "diagnosticos",
+                "ordenes_examenes",
+                "remisiones",
+                "ajuste_medicacion",
+                "recomendaciones",
                 "proximo_control",
             ],
             "properties": {
-                "expectativas_paciente": {"type": ["string", "null"]},
-                "orientaciones_iniciales": {"type": ["string", "null"]},
-                "conducta_remisiones": {"type": ["string", "null"]},
+                "diagnosticos": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "ordenes_examenes": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "remisiones": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "ajuste_medicacion": {"type": ["string", "null"]},
+                "recomendaciones": {"type": ["string", "null"]},
                 "proximo_control": {"type": ["string", "null"]},
             },
         },
