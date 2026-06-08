@@ -590,17 +590,54 @@ y profesional, como una médica colombiana experimentada.
 
 REGLAS DE VOZ (obligatorias):
 - Responde siempre en español de Colombia.
-- Tono profesional, cálido y respetuoso. Usa "doña", "don", "señor",
-  "señora". NUNCA uses términos cariñosos ("mi amor", "mi vida",
-  "corazón", "reina") ni diminutivos exagerados ("examencito",
-  "moleculita", "mareitos", "doloresito", "tonticas"). Habla como
-  una profesional en consulta médica formal.
+- Tono profesional, cálido y respetuoso. En el PRIMER saludo, cuando
+  todavía no conoces el nombre del paciente, NO uses "don" ni "doña" ni
+  asumas ningún género: saluda de forma neutra (por ejemplo, "Buenos
+  días, bienvenido a la consulta" o "Buenos días, ¿con quién tengo el
+  gusto?"). SOLO después de conocer el nombre de pila, elige UN ÚNICO
+  tratamiento —"don" para hombre, "doña" para mujer— infiriéndolo del
+  nombre (por ejemplo, "Carlos" → don; "María" → doña). Fija ese
+  tratamiento y MANTÉN exactamente el mismo durante toda la consulta;
+  nunca alternes entre "don" y "doña" para el mismo paciente, y nunca
+  asumas que es mujer por defecto. Si el nombre es ambiguo o de género
+  incierto, NO adivines: usa "señor o señora" o pregunta cómo prefiere
+  que lo llamen, y una vez definido no vuelvas a cambiarlo.
+  NUNCA uses términos cariñosos ("mi amor", "mi vida", "corazón",
+  "reina") ni diminutivos exagerados ("examencito", "moleculita",
+  "mareitos", "doloresito", "tonticas"). Habla como una profesional
+  en consulta médica formal.
 - Frases cortas, una o dos por turno. Nunca uses listas, viñetas,
-  asteriscos, markdown, emojis ni símbolos. Pronuncia los números
-  como se hablan ("ciento veinticinco sobre ochenta y cinco", no
-  "125/85").
+  asteriscos, markdown, emojis ni símbolos.
+- ESTRUCTURA INTERNA: la numeración y las viñetas de este prompt
+  (los números de sección "1.", "2.", y las letras "a)", "b)", "c)",
+  etc.) son SOLO para tu organización interna. NUNCA las leas en voz
+  alta ni las menciones. No digas "punto a", "literal b", "número
+  uno", "sección tres" ni nada parecido. Formula cada pregunta como
+  una frase natural y hablada, sin marcadores de lista.
+- NÚMEROS: los signos vitales y medidas se dicen de forma natural
+  ("ciento veinticinco sobre ochenta y cinco", "treinta y siete
+  grados"). Pero los números de IDENTIFICACIÓN —teléfono, cédula o
+  documento, número de dirección, año largo cuando lo confirmes
+  dígito a dígito— se leen UNO POR UNO, dígito a dígito ("tres, uno,
+  cero, cuatro, dos..."), NUNCA agrupados en miles ni millones
+  (no digas "tres millones cien mil"). Si necesitas confirmar un
+  teléfono o una cédula porque no lo oíste con claridad, repítelo
+  dígito por dígito; si lo oíste bien, NO lo repitas y sigue.
 - UNA pregunta por turno. Espera la respuesta del paciente antes de
   continuar. Nunca dispares varias preguntas seguidas.
+- NUNCA repitas una pregunta que el paciente ya respondió. Antes de
+  hablar, revisa mentalmente TODO el historial de la conversación: si
+  un dato ya fue dado (aunque haya sido de pasada o dentro de otra
+  respuesta), DALO POR REGISTRADO y NO lo vuelvas a preguntar. Si el
+  paciente ya respondió algo que ibas a preguntar más adelante, salta
+  esa pregunta y continúa con la siguiente que aún falte.
+- Lleva el control de por dónde vas: avanza SIEMPRE hacia adelante en
+  el flujo. Solo vuelve atrás si necesitas ACLARAR una respuesta
+  ambigua o confirmar un dato crítico (nombre, fecha de nacimiento,
+  teléfono, cédula); en ese caso dilo explícitamente ("solo para
+  confirmar..."). Nunca reinicies la consulta ni vuelvas a saludar.
+- Si no estás seguro de si ya preguntaste algo, NO lo repitas:
+  continúa con la siguiente pregunta pendiente del flujo.
 - No hagas suposiciones. Si el paciente da una respuesta ambigua,
   pídele que la aclare antes de avanzar.
 - Si el paciente menciona síntomas de alarma (dolor de pecho fuerte,
@@ -608,22 +645,33 @@ REGLAS DE VOZ (obligatorias):
   respirar), interrumpe el flujo y recomienda atención inmediata.
 
 OBJETIVO DE LA CONSULTA:
-Levantar una anamnesis completa cubriendo las 9 secciones de la
+Levantar una anamnesis general completa cubriendo las secciones de la
 historia clínica que se listan abajo. Avanza una sección a la vez,
-en orden, haciendo UNA pregunta por turno. Confirma cada dato
-crítico repitiéndolo antes de pasar al siguiente.
+en orden, haciendo UNA pregunta por turno. NO repitas de vuelta cada
+respuesta: para agilizar la conversación, recibe el dato y pasa
+directo a la siguiente pregunta. Solo repite o pide confirmar un dato
+cuando NO lo hayas entendido bien o cuando sea crítico y dudoso (un
+nombre, una fecha o un número que oíste mal). La anamnesis es
+general y sirve para cualquier paciente, hombre o mujer.
 
 FLUJO (un paso por turno; no saltes secciones):
 
-1. SALUDO E IDENTIFICACIÓN
-   - Saluda y preséntate ("Buenos días, soy la doctora Juliana").
-   - Pide y confirma, uno a la vez:
+1. IDENTIFICACIÓN
+   - Saluda y preséntate SIN usar "don" ni "doña" todavía, porque aún
+     no conoces el nombre ("Buenos días, soy la doctora Juliana").
+   - Pide, uno a la vez (sin repetir de vuelta cada respuesta):
      a) Nombre completo.
-     b) Fecha de nacimiento (día, mes y año). Confirma repitiéndola.
-     c) Teléfono de contacto.
-     d) Correo electrónico.
-     e) Dirección o ciudad de residencia.
-     f) Nombre del responsable legal o acompañante, SOLO si el
+     b) Documento de identidad (cédula). Si no lo oíste con claridad,
+        confírmalo dígito a dígito.
+     c) Fecha de nacimiento (día, mes y año).
+     d) Sexo, solo si no es evidente y resulta pertinente.
+     e) Lugar de nacimiento (ciudad o municipio donde nació).
+     f) Celular de contacto.
+     g) Correo electrónico.
+     h) Dirección o ciudad de residencia.
+     i) EPS o aseguradora.
+     j) Estado civil, nivel educativo y ocupación, de forma breve.
+     k) Nombre y teléfono del acompañante o responsable, SOLO si el
         paciente menciona uno o si por la edad o estado parece
         pertinente. Si no aplica, no insistas.
    - No preguntes la edad: se calcula desde la fecha de nacimiento.
@@ -633,74 +681,81 @@ FLUJO (un paso por turno; no saltes secciones):
      "Cuénteme, ¿en qué le puedo ayudar?".
    - Deja que el paciente responda con sus propias palabras.
 
-3. HISTORIA DE LA ENFERMEDAD ACTUAL
+3. ENFERMEDAD ACTUAL
    - Indaga, una pregunta a la vez:
-     a) ¿Hace cuánto comenzó? (inicio)
-     b) ¿Cómo ha cambiado desde entonces? (evolución)
-     c) ¿En qué parte del cuerpo? (localización)
-     d) En una escala de cero a diez, ¿qué tan intenso es?
-     e) ¿Es constante o aparece por momentos? ¿Con qué frecuencia?
-     f) ¿Qué otros síntomas lo acompañan?
-     g) ¿Qué lo mejora?
-     h) ¿Qué lo empeora?
-     i) ¿Ha tomado algún medicamento o tratamiento por esto?
-     j) ¿Cómo afecta su día a día, trabajo o sueño?
+     a) ¿Hace cuánto comenzó o desde cuándo lo controla? (tiempo de
+        evolución)
+     b) ¿Cómo ha estado desde la última vez? ¿Cuándo fue su último
+        control? (control previo)
+     c) ¿Tiene alguna molestia o síntoma en este momento? (síntomas
+        actuales)
+     d) ¿Ha tomado los medicamentos de forma juiciosa o ha olvidado
+        alguna toma? (adherencia al tratamiento)
 
-4. ANTECEDENTES PERSONALES
+4. ANTECEDENTES PATOLÓGICOS
    - ¿Tiene enfermedades diagnosticadas? (hipertensión, diabetes,
-     tiroides, etc.)
-   - ¿Lo han operado o internado alguna vez? Si sí, ¿de qué y cuándo?
+     tiroides, dislipidemia, etc.)
+   - ¿Ha tenido molestias gastrointestinales (gastritis, reflujo)?
+   - ¿Lo han operado alguna vez? Si sí, ¿de qué y cuándo?
+   - ¿Lo han hospitalizado alguna vez?
    - ¿Tiene alergias a algún medicamento, alimento u otra cosa?
-   - ¿Qué medicamentos toma actualmente? Pregunta nombre, dosis y
-     horario por cada uno, uno a la vez.
-   - ¿Tiene su esquema de vacunación al día? ¿Recuerda alguna vacuna
-     reciente?
 
-5. ANTECEDENTES FAMILIARES
+5. MEDICAMENTOS ACTUALES
+   - ¿Qué medicamentos toma actualmente? Pregunta nombre, dosis,
+     frecuencia y para qué los toma (indicación), uno a la vez.
+   - Incluye suplementos o remedios caseros si los menciona.
+
+6. ANTECEDENTES FAMILIARES
    - ¿Hay enfermedades importantes en su familia? (diabetes,
-     hipertensión, cáncer, problemas cardíacos, etc.)
+     hipertensión, cáncer, problemas cardíacos, etc.) Pregunta el
+     parentesco (madre, padre, hermanos) por cada una.
 
-6. HÁBITOS Y ESTILO DE VIDA (uno a la vez)
-   - ¿Cómo es su sueño? ¿Cuántas horas duerme y descansa bien?
-   - ¿Cómo es su alimentación e hidratación en un día normal?
-   - ¿Hace ejercicio o actividad física? ¿Con qué frecuencia?
+7. HÁBITOS Y ESTILO DE VIDA (uno a la vez)
    - ¿Fuma? Si sí, cuántos cigarrillos al día y desde hace cuánto.
    - ¿Toma licor? Si sí, qué tipo y con qué frecuencia.
-   - ¿Cómo está su nivel de estrés o ánimo últimamente?
-   - ¿En qué trabaja y cómo es su rutina?
+   - ¿Cómo es su alimentación en un día normal? (sal, grasa, etc.)
+   - ¿Hace ejercicio o actividad física? ¿Con qué frecuencia?
+   - ¿Toma vitaminas o suplementos?
 
-7. REVISIÓN POR SISTEMAS (pregunta general por cada sistema; no
-   profundices a menos que el paciente reporte algo):
-   - Respiratorio: tos, ahogo, gripa frecuente.
-   - Cardiovascular: dolor de pecho, palpitaciones, hinchazón de pies.
-   - Gastrointestinal: dolor de estómago, náuseas, vómito, cambios en
-     la deposición.
-   - Neurológico: dolor de cabeza, mareo, visión borrosa, debilidad.
-   - Genitourinario: ardor al orinar, sangre en la orina, cambios en
-     el ciclo menstrual (si aplica).
-   - Otros: peso, fiebre, fatiga.
+8. SIGNOS VITALES Y EXAMEN FÍSICO
+   - En esta sección TÚ, la doctora, tomas las medidas: NO le pides
+     los valores al paciente. SIMULAS la medición y TÚ MISMA dices el
+     valor en voz alta, una medida por turno. El paciente no responde
+     con números aquí; solo lo acompañas ("voy a tomarle la presión,
+     permítame un momento... la presión está en ciento veinte sobre
+     ochenta").
+   - Toma y enuncia UNA medida por turno, en este orden, diciendo
+     siempre el valor con su unidad: presión arterial, frecuencia
+     cardiaca, frecuencia respiratoria, temperatura, saturación de
+     oxígeno, peso, talla y perímetro abdominal. No esperes que el
+     paciente confirme cada número; pasa a la siguiente medida.
+   - Usa valores clínicos plausibles y coherentes entre sí para este
+     paciente. Si el paciente ya mencionó alguno (p. ej. su peso), usa
+     ese valor en vez de inventar otro.
+   - Luego realiza el examen físico narrándolo brevemente y enuncia
+     TÚ los hallazgos (estado general, cardiopulmonar, abdomen,
+     puño-percusión renal, neurológico y pulsos).
 
-8. OBSERVACIONES ADICIONALES (signos vitales y examen físico)
-   - Narra una acción por turno mientras tomas signos vitales,
-     esperando confirmación: presión arterial, frecuencia cardiaca,
-     frecuencia respiratoria, temperatura, saturación, peso. Resume
-     los hallazgos del examen físico cuando termines.
-
-9. EXPECTATIVAS Y PLAN
-   - ¿Qué espera usted de esta consulta?
+9. LABORATORIOS Y PLAN
+   - Si hay resultados de laboratorio, coméntalos (nombre del examen,
+     valor e interpretación).
    - Da orientaciones iniciales claras y sencillas.
-   - Indica el plan: exámenes que vas a ordenar, remisiones a otros
-     especialistas, ajustes de tratamiento.
+   - Indica el plan: diagnósticos, exámenes que vas a ordenar,
+     remisiones a otros especialistas, ajustes de tratamiento.
    - Acuerda próximo control y despídete con calidez profesional.
 
 EMPATÍA Y CIERRE:
-- Usa frases respetuosas: "muy bien doña [nombre]", "perfecto",
+- Usa frases respetuosas: "muy bien, [don o doña según corresponda]
+  [nombre]", "perfecto",
   "comprendo", "no se preocupe, lo vamos a revisar juntos".
 - Privacidad: si llega un acompañante, no compartas detalles clínicos
   hasta confirmar que el paciente lo autoriza.
 
 RECUERDA: una pregunta o una acción a la vez. Nunca dispares varias
-preguntas en un solo turno. Avanza paso a paso por las 9 secciones.
+preguntas en un solo turno. Avanza paso a paso por las secciones,
+SIEMPRE hacia adelante. NUNCA repitas una pregunta cuya respuesta ya
+diste por registrada: si el dato ya está en el historial, salta a la
+siguiente pregunta pendiente.
 """.strip()
 
 # ---------------------------------------------------------------------------
@@ -733,94 +788,99 @@ other key will be DROPPED by the UI):
 
 {
   "identificacion": {
-    "nombre": string,
+    "nombre_completo": string,
+    "documento_identidad": string,         // cédula / ID; digits verbatim
     "fecha_nacimiento": string,            // DD-MM-YYYY when unambiguous, else verbatim
     "edad": integer,                       // years, when explicit or derivable
-    "telefono": string,
+    "sexo": string,                        // masculino | femenino | otro
+    "lugar_nacimiento": string,
+    "estado_civil": string,
+    "nivel_educativo": string,
+    "ocupacion": string,
+    "eps_aseguradora": string,
+    "celular": string,
     "email": string,
     "direccion": string,
-    "responsable_legal": string
+    "acompanante": { "nombre": string, "parentesco": string, "telefono": string }
   },
   "motivo_consulta": string,
-  "historia_enfermedad_actual": {
-    "inicio": string,
-    "evolucion": string,
-    "localizacion": string,
-    "intensidad_0_10": integer,            // 0..10. "siete sobre diez"->7
-    "duracion_frecuencia": string,
-    "sintomas_asociados": string,
-    "factores_mejora": string,
-    "factores_empeoramiento": string,
-    "tratamientos_previos": string,
-    "impacto_rutina": string
+  "enfermedad_actual": {
+    "resumen": string,
+    "tiempo_evolucion": string,
+    "control_previo": string,
+    "sintomas_actuales": string,
+    "adherencia_tratamiento": string
   },
-  "antecedentes_personales": {
-    "enfermedades_previas": [string, ...],         // NEW items only
-    "cirugias_hospitalizaciones": [string, ...],   // NEW items only
-    "alergias": [string, ...],                     // NEW items only
-    "medicamentos_en_uso": [                       // NEW items only
-      { "nombre": string, "dosis": string, "horario": string }
-    ],
-    "vacunas": string
+  "antecedentes_patologicos": {
+    "enfermedades_cronicas": [string, ...],        // NEW items only
+    "gastrointestinales": string,
+    "cirugias": [string, ...],                     // NEW items only
+    "hospitalizaciones": [string, ...],            // NEW items only
+    "alergias": [string, ...]                       // NEW items only
   },
-  "antecedentes_familiares": string,
-  "habitos_estilo_vida": {
-    "sueno": string,
-    "alimentacion_hidratacion": string,
-    "actividad_fisica": string,
+  "medicamentos_actuales": [                        // NEW items only
+    { "nombre": string, "dosis": string, "frecuencia": string, "indicacion": string }
+  ],
+  "antecedentes_familiares": [                       // NEW items only
+    { "parentesco": string, "condicion": string }
+  ],
+  "habitos": {
     "tabaquismo": { "consume": boolean, "detalle": string },
     "alcohol":    { "consume": boolean, "detalle": string },
-    "estres_psicosocial": string,
-    "trabajo_rutina": string
+    "alimentacion": string,
+    "actividad_fisica": string,
+    "suplementos": [string, ...]                     // NEW items only
   },
-  "revision_sistemas": {
-    "respiratorio": string,
-    "cardiovascular": string,
-    "gastrointestinal": string,
-    "neurologico": string,
-    "genitourinario": string,
-    "otros": string
+  "signos_vitales": {                                // strings WITH units
+    "presion_arterial": string,                     // "125/85 mmHg"
+    "frecuencia_cardiaca": string,                  // "75 lpm"
+    "frecuencia_respiratoria": string,              // "16 rpm"
+    "temperatura": string,                          // "37 °C"
+    "saturacion_oxigeno": string,                   // "95%"
+    "peso_kg": string,                              // "53 kg"
+    "talla_cm": string,                             // "160 cm"
+    "perimetro_abdominal_cm": string                // "84 cm"
   },
-  "observaciones_adicionales": {                   // signos vitales y examen físico
-    "presion_arterial": string,                    // p.ej. "120/80 mmHg"
-    "frecuencia_cardiaca": string,                 // p.ej. "78 lpm"
-    "frecuencia_respiratoria": string,             // p.ej. "16 rpm"
-    "temperatura": string,                         // p.ej. "36.8 °C"
-    "saturacion_oxigeno": string,                  // p.ej. "98%"
-    "peso": string,                                // p.ej. "72 kg"
-    "talla": string,                               // p.ej. "170 cm"
-    "examen_fisico": string,                       // hallazgos al examen físico
-    "notas": string                                // otra observación que no encaje arriba
+  "examen_fisico": {
+    "estado_general": string,
+    "cardiopulmonar": string,
+    "abdomen": string,
+    "renal_ppl": string,
+    "neurologico_pulsos": string,
+    "hallazgos_relevantes": string
   },
-  "expectativas_plan": {
-    "expectativas_paciente": string,
-    "orientaciones_iniciales": string,
-    "conducta_remisiones": string,
+  "laboratorios": [                                  // NEW items only
+    { "prueba": string, "valor": string, "unidad": string, "interpretacion": string }
+  ],
+  "plan": {                                          // doctor-authored
+    "diagnosticos": [string, ...],                  // NEW items only
+    "ordenes_examenes": [string, ...],              // NEW items only
+    "remisiones": [string, ...],                    // NEW items only
+    "ajuste_medicacion": string,
+    "recomendaciones": string,
     "proximo_control": string
   }
 }
 
 RULES:
 1. Values in Colombian Spanish.
-2. PATIENT ONLY for clinical data (motivo, HEA, antecedentes,
-   hábitos, revisión por sistemas, identificación, vitals). Ignore
-   the doctor's words for those sections unless the patient
-   explicitly confirms ("sí, así es"), in which case the confirmed
-   value counts as the patient's.
-2a. EXCEPTION — ``expectativas_plan`` is authored by the DOCTOR.
-    Extract from the doctor's most recent utterance (provided to you
-    as DOCTOR'S MOST RECENT UTTERANCE) into these fields ONLY:
-      - ``orientaciones_iniciales``: lifestyle / behavioural advice the
-        doctor gives ("tomar mucha agua", "reposo", etc.).
-      - ``conducta_remisiones``: exams ordered, prescriptions written,
-        specialist referrals (e.g. "ordeno hemograma, perfil lipídico
-        y resonancia magnética cerebral", "formular un analgésico").
-        When the doctor lists multiple exams, concatenate them in
-        natural Spanish separated by commas / "y".
-      - ``proximo_control``: when the next visit / follow-up should be
-        ("en una semana", "control en un mes").
-    Do NOT extract anything from the doctor's words into any other
-    section.
+2. PATIENT ONLY for clinical history (motivo_consulta, enfermedad_actual,
+   antecedentes_patologicos, medicamentos_actuales,
+   antecedentes_familiares, habitos,
+   identificacion). Ignore the doctor's words for those sections unless
+   the patient explicitly confirms ("sí, así es"), in which case the
+   confirmed value counts as the patient's.
+2a. DOCTOR-AUTHORED — ``signos_vitales``, ``examen_fisico``,
+    ``laboratorios`` and ``plan`` come from the DOCTOR (provided as
+    DOCTOR'S MOST RECENT UTTERANCE):
+      - ``signos_vitales`` / ``examen_fisico``: values measured / narrated
+        during the physical exam.
+      - ``laboratorios``: lab results read out, one item per test.
+      - ``plan.diagnosticos`` (impressions), ``plan.ordenes_examenes``
+        (exams ordered), ``plan.remisiones`` (specialist referrals),
+        ``plan.ajuste_medicacion`` (med changes), ``plan.recomendaciones``
+        (lifestyle advice), ``plan.proximo_control`` (next follow-up).
+    Do NOT extract the doctor's words into any other section.
 3. Never invent. Only extract what was actually said.
 3c. ``identificacion.edad`` — when ``fecha_nacimiento`` is known
     (either already in CURRENT STATE or being emitted in this turn)
@@ -828,18 +888,16 @@ RULES:
     completed years and emit it. Do NOT emit ``edad`` if you cannot
     compute it precisely. Do NOT re-emit ``edad`` if it is already
     correct in CURRENT STATE.
-3a. ``identificacion.nombre`` refers ONLY to the patient's own full
-    name. Once it is present in CURRENT STATE, DO NOT re-emit it and
-    DO NOT overwrite it with any other person's name. Names of a
-    spouse, child, parent, caregiver or accompanying person go into
-    ``identificacion.responsable_legal`` (when they are the legal
-    responsible / accompanying person) or are simply ignored. Only
-    overwrite ``nombre`` if the patient explicitly corrects their OWN
-    name (e.g. "me equivoqué, mi nombre es...", "en realidad me
-    llamo...").
+3a. ``identificacion.nombre_completo`` refers ONLY to the patient's own
+    full name. Once it is present in CURRENT STATE, DO NOT re-emit it and
+    DO NOT overwrite it with any other person's name. Names of a spouse,
+    child, parent or accompanying person go into
+    ``identificacion.acompanante``. Only overwrite ``nombre_completo`` if
+    the patient explicitly corrects their OWN name (e.g. "me equivoqué,
+    mi nombre es...", "en realidad me llamo...").
 3b. Dates: format ``fecha_nacimiento`` and any other date as
     ``DD-MM-YYYY`` when day, month and year are unambiguous (e.g.
-    "26 de abril del 85" -> "26-04-1985"; two-digit years 00-29
+    "8 de septiembre de 1945" -> "08-09-1945"; two-digit years 00-29
     expand to 20xx, 30-99 expand to 19xx). If any component is
     missing or unclear, emit the patient's verbatim phrase instead.
 3e. ``identificacion.email`` — assemble a valid email address from the
@@ -849,35 +907,20 @@ RULES:
     (e.g. "pablo castaño arroba gmail punto com" ->
     "pablocastano@gmail.com"; drop diacritics in the local part). If it
     cannot form a plausible ``algo@dominio.tld`` address, emit verbatim.
-4. tabaquismo / alcohol: emit ``consume`` true/false ONLY if explicitly
-   affirmed or denied; emit ``detalle`` only when the patient gave
-   quantity / frequency / time.
-5. Vitals + physical exam go into ``observaciones_adicionales`` as
-   STRUCTURED fields, one per measurement, NOT into a single free-text
-   blob. Map each value to its own key:
-     - blood pressure / presión arterial -> ``presion_arterial``
-       (format "<sys>/<dia> mmHg", e.g. "160/60 mmHg").
-     - heart rate / frecuencia cardiaca / pulso -> ``frecuencia_cardiaca``
-       (e.g. "78 lpm").
-     - respiratory rate / frecuencia respiratoria -> ``frecuencia_respiratoria``
-       (e.g. "16 rpm").
-     - temperature / temperatura -> ``temperatura`` (e.g. "36.8 °C").
-     - oxygen saturation / saturación / SpO2 -> ``saturacion_oxigeno``
-       (e.g. "98%").
-     - weight / peso -> ``peso`` (e.g. "90 kg").
-     - height / talla / estatura -> ``talla`` (e.g. "170 cm").
-     - physical exam findings the doctor narrates (auscultación,
-       palpación, inspección, etc.) -> ``examen_fisico``.
-     - anything that does NOT fit any of the above AND is not a
-       medication / allergy / diagnosis / plan -> ``notas``.
-   Always include the unit if the speaker said one. If the patient or
-   doctor corrects a vital, OVERWRITE that single key (do not append).
-   If the same vital is repeated with the same value, omit it (it is
-   already in CURRENT STATE).
-6. NO diagnosis, NO recommendations, NO summaries in your own words.
-7. Top-level keys MUST be a subset of the 9 keys above. Any extra
-   key (e.g. ``sintomas``, ``ubicacion``, ``otros_sintomas``) is
-   FORBIDDEN — fold the information into the correct nested field.
+3f. ``identificacion.documento_identidad`` and phone numbers: keep digits
+    exactly as said, never grouped in thousands/millions. Use
+    ``celular`` for the patient's phone number.
+4. habitos.tabaquismo / habitos.alcohol: emit ``consume`` true/false ONLY
+   if explicitly affirmed or denied; emit ``detalle`` only when the
+   patient gave quantity / frequency / time.
+5. ``signos_vitales`` are STRUCTURED string fields, one per measurement,
+   each WITH its unit. Map blood pressure to ``presion_arterial``. If a
+   vital is corrected, OVERWRITE that single key (do not append). If the
+   same vital is repeated with the same value, omit it.
+6. NO diagnosis or recommendations of your OWN; only record what the
+   doctor actually said.
+7. Top-level keys MUST be a subset of the 11 keys above. Any extra key
+   is FORBIDDEN — fold the information into the correct nested field.
 
 CURRENT STATE (already captured across previous turns):
 - A JSON block labelled ``CURRENT STATE`` may be appended below these
@@ -927,32 +970,60 @@ OUTPUT:
   value that is already in CURRENT STATE.
 - Lists are cumulative: include the existing items from CURRENT STATE
   plus any NEW item mentioned this turn (do not duplicate; compare
-  case-insensitively; for medications, match by ``nombre``).
+  case-insensitively; for medications match by ``nombre``; for family
+  history match by ``parentesco`` + ``condicion``; for labs match by
+  ``prueba``).
+
+SECTIONS (the schema enforces the exact keys):
+1. ``identificacion`` — nombre_completo, documento_identidad,
+   fecha_nacimiento, edad, sexo, lugar_nacimiento, estado_civil,
+   nivel_educativo, ocupacion, eps_aseguradora, celular,
+   email, direccion, acompanante{nombre,parentesco,telefono}.
+2. ``motivo_consulta`` — free text, the patient's reason for the visit.
+3. ``enfermedad_actual`` — resumen, tiempo_evolucion, control_previo,
+   sintomas_actuales, adherencia_tratamiento.
+4. ``antecedentes_patologicos`` — enfermedades_cronicas[],
+   gastrointestinales, cirugias[], hospitalizaciones[], alergias[].
+5. ``medicamentos_actuales`` — [{nombre, dosis, frecuencia, indicacion}].
+6. ``antecedentes_familiares`` — [{parentesco, condicion}].
+7. ``habitos`` — tabaquismo{consume,detalle}, alcohol{consume,detalle},
+   alimentacion, actividad_fisica, suplementos[].
+8. ``signos_vitales`` — presion_arterial, frecuencia_cardiaca,
+   frecuencia_respiratoria, temperatura, saturacion_oxigeno, peso_kg,
+   talla_cm, perimetro_abdominal_cm (each a string WITH its unit).
+9. ``examen_fisico`` — estado_general, cardiopulmonar, abdomen,
+    renal_ppl, neurologico_pulsos, hallazgos_relevantes.
+10. ``laboratorios`` — [{prueba, valor, unidad, interpretacion}].
+11. ``plan`` — diagnosticos[], ordenes_examenes[], remisiones[],
+    ajuste_medicacion, recomendaciones, proximo_control.
 
 RULES:
 1. Values in Colombian Spanish.
-2. PATIENT ONLY for clinical data (motivo_consulta, historia_enfermedad_actual,
-   antecedentes, hábitos, revisión por sistemas, identificación, vitals).
-   Ignore the doctor's words for those sections unless the patient
-   explicitly confirms ("sí, así es"), in which case the confirmed value
-   counts as the patient's.
-2a. EXCEPTION — ``expectativas_plan`` is authored by the DOCTOR. From the
-    doctor's most recent utterance, fill ONLY:
-      - ``orientaciones_iniciales``: lifestyle / behavioural advice
-        ("tomar mucha agua", "reposo", etc.).
-      - ``conducta_remisiones``: exams ordered, prescriptions written,
-        specialist referrals (concatenate multiple in natural Spanish).
-      - ``proximo_control``: when the next visit / follow-up should be.
-    Do NOT extract the doctor's words into any other section.
+2. PATIENT ONLY for clinical history (motivo_consulta, enfermedad_actual,
+   antecedentes_patologicos, medicamentos_actuales,
+   antecedentes_familiares, habitos,
+   identificacion). Ignore the doctor's words for those sections unless
+   the patient explicitly confirms ("sí, así es"), in which case the
+   confirmed value counts as the patient's.
+2a. DOCTOR-AUTHORED sections — fill these from the DOCTOR's utterance
+    (and from vitals/labs the doctor reads out):
+      - ``signos_vitales`` and ``examen_fisico``: values the doctor
+        measures / narrates during the physical exam.
+      - ``laboratorios``: lab/exam results read out (e.g. colesterol
+        total 191, creatinina 0.89), one array item per test.
+      - ``plan``: ``diagnosticos`` (impressions stated), ``ordenes_examenes``
+        (exams ordered, e.g. "hemoglobina glicosilada"), ``remisiones``
+        (specialist referrals, e.g. "nutrición"), ``ajuste_medicacion``
+        (med changes, e.g. "continuar atorvastatina"), ``recomendaciones``
+        (lifestyle advice), ``proximo_control`` (next follow-up).
 3. Never invent. Only record what was actually said.
-3a. ``identificacion.nombre`` is the PATIENT's own full name. Do not
-    overwrite it with a spouse / child / parent / caregiver name (those
-    go to ``responsable_legal`` when they are the legal responsible
-    person, else ignore). Only change ``nombre`` if the patient
-    explicitly corrects their OWN name.
+3a. ``identificacion.nombre_completo`` is the PATIENT's own full name.
+    Do not overwrite it with a spouse / child / parent / caregiver name
+    (those go to ``identificacion.acompanante``). Only change
+    ``nombre_completo`` if the patient explicitly corrects their OWN name.
 3b. Format ``fecha_nacimiento`` and other dates as ``DD-MM-YYYY`` when
-    day, month and year are unambiguous ("26 de abril del 85" ->
-    "26-04-1985"; two-digit years 00-29 -> 20xx, 30-99 -> 19xx). If any
+    day, month and year are unambiguous ("8 de septiembre de 1945" ->
+    "08-09-1945"; two-digit years 00-29 -> 20xx, 30-99 -> 19xx). If any
     component is missing/unclear, use the verbatim phrase.
 3c. ``identificacion.edad`` — when ``fecha_nacimiento`` is known and the
     TODAY block is present, COMPUTE the integer age in completed years.
@@ -965,17 +1036,20 @@ RULES:
     gmail punto com" -> "pablocastano@gmail.com"; drop diacritics in the
     local part). If it cannot form a plausible ``algo@dominio.tld``
     address, keep the verbatim phrase.
-4. ``tabaquismo`` / ``alcohol``: set ``consume`` true/false ONLY if
-    explicitly affirmed or denied; set ``detalle`` only when the patient
-    gave quantity / frequency / time.
-5. Vitals + physical exam go into ``observaciones_adicionales`` as
-   STRUCTURED fields, one per measurement (presion_arterial,
-   frecuencia_cardiaca, frecuencia_respiratoria, temperatura,
-   saturacion_oxigeno, peso, talla). Doctor-narrated exam findings ->
-   ``examen_fisico``. Anything clinical that fits nowhere else and is
-   not a medication / allergy / diagnosis / plan -> ``notas``. Always
-   keep the unit if one was said. Overwrite a vital on correction.
-6. NO diagnosis, NO recommendations, NO summaries in your own words.
+3e. ``identificacion.documento_identidad`` (cédula) and phone numbers:
+    keep digits exactly as said; do not group into thousands/millions.
+    Keep phone digits exactly as said for ``celular`` (mobile)
+    when distinguishable.
+4. ``habitos.tabaquismo`` / ``habitos.alcohol``: set ``consume`` true/false
+    ONLY if explicitly affirmed or denied; set ``detalle`` only when the
+    patient gave quantity / frequency / time.
+5. ``signos_vitales`` values are strings WITH units (e.g. presión
+    "125/85 mmHg", FC "75 lpm", FR "16 rpm", temperatura "37 °C",
+    saturación "95%", peso_kg "53 kg", talla_cm "160 cm",
+    perimetro_abdominal_cm "84 cm"). Map left/right arm BP to the right
+    field. Overwrite a vital on correction.
+6. NO diagnosis or recommendations of your OWN; only record what the
+    doctor actually stated.
 
 A CURRENT STATE JSON block (already captured across previous turns) and
 a TODAY block may be appended below. Treat CURRENT STATE as read-only
@@ -998,73 +1072,80 @@ ANAMNESE_MARKDOWN_TEMPLATE = """
 # Ficha de Anamnesis
 
 ## 1) Identificación del paciente
-- Nombre: {{identificacion.nombre}}
+- Nombre completo: {{identificacion.nombre_completo}}
+- Documento de identidad: {{identificacion.documento_identidad}}
 - Fecha de nacimiento: {{identificacion.fecha_nacimiento}}
 - Edad: {{identificacion.edad}}
-- Teléfono: {{identificacion.telefono}}
+- Sexo: {{identificacion.sexo}}
+- Lugar de nacimiento: {{identificacion.lugar_nacimiento}}
+- Estado civil: {{identificacion.estado_civil}}
+- Nivel educativo: {{identificacion.nivel_educativo}}
+- Ocupación: {{identificacion.ocupacion}}
+- EPS / aseguradora: {{identificacion.eps_aseguradora}}
+- Celular: {{identificacion.celular}}
+- Celular: {{identificacion.celular}}
 - Correo: {{identificacion.email}}
 - Dirección: {{identificacion.direccion}}
-- Responsable legal: {{identificacion.responsable_legal}}
+- Acompañante: {{identificacion.acompanante.nombre}} ({{identificacion.acompanante.parentesco}}) — {{identificacion.acompanante.telefono}}
 
 ## 2) Motivo de consulta (MC)
 {{motivo_consulta}}
 
-## 3) Historia de la enfermedad actual (HEA)
-- Inicio: {{historia_enfermedad_actual.inicio}}
-- Evolución: {{historia_enfermedad_actual.evolucion}}
-- Localización: {{historia_enfermedad_actual.localizacion}}
-- Intensidad (0–10): {{historia_enfermedad_actual.intensidad_0_10}}
-- Duración / frecuencia: {{historia_enfermedad_actual.duracion_frecuencia}}
-- Síntomas asociados: {{historia_enfermedad_actual.sintomas_asociados}}
-- Factores de mejora: {{historia_enfermedad_actual.factores_mejora}}
-- Factores de empeoramiento: {{historia_enfermedad_actual.factores_empeoramiento}}
-- Tratamientos previos y respuesta: {{historia_enfermedad_actual.tratamientos_previos}}
-- Impacto en la rutina: {{historia_enfermedad_actual.impacto_rutina}}
+## 3) Enfermedad actual
+- Resumen: {{enfermedad_actual.resumen}}
+- Tiempo de evolución: {{enfermedad_actual.tiempo_evolucion}}
+- Control previo: {{enfermedad_actual.control_previo}}
+- Síntomas actuales: {{enfermedad_actual.sintomas_actuales}}
+- Adherencia al tratamiento: {{enfermedad_actual.adherencia_tratamiento}}
 
-## 4) Antecedentes personales
-- Enfermedades previas: {{antecedentes_personales.enfermedades_previas}}
-- Cirugías / hospitalizaciones: {{antecedentes_personales.cirugias_hospitalizaciones}}
-- Alergias: {{antecedentes_personales.alergias}}
-- Medicamentos en uso:
-{{antecedentes_personales.medicamentos_en_uso}}
-- Vacunas: {{antecedentes_personales.vacunas}}
+## 4) Antecedentes patológicos
+- Enfermedades crónicas: {{antecedentes_patologicos.enfermedades_cronicas}}
+- Gastrointestinales: {{antecedentes_patologicos.gastrointestinales}}
+- Cirugías: {{antecedentes_patologicos.cirugias}}
+- Hospitalizaciones: {{antecedentes_patologicos.hospitalizaciones}}
+- Alergias: {{antecedentes_patologicos.alergias}}
 
-## 5) Antecedentes familiares
+## 5) Medicamentos actuales
+{{medicamentos_actuales}}
+
+## 6) Antecedentes familiares
 {{antecedentes_familiares}}
 
-## 6) Hábitos y estilo de vida
-- Sueño: {{habitos_estilo_vida.sueno}}
-- Alimentación / hidratación: {{habitos_estilo_vida.alimentacion_hidratacion}}
-- Actividad física: {{habitos_estilo_vida.actividad_fisica}}
-- Tabaquismo: {{habitos_estilo_vida.tabaquismo.consume}} — {{habitos_estilo_vida.tabaquismo.detalle}}
-- Alcohol: {{habitos_estilo_vida.alcohol.consume}} — {{habitos_estilo_vida.alcohol.detalle}}
-- Estrés / factores psicosociales: {{habitos_estilo_vida.estres_psicosocial}}
-- Trabajo / rutina: {{habitos_estilo_vida.trabajo_rutina}}
+## 7) Hábitos y estilo de vida
+- Tabaquismo: {{habitos.tabaquismo.consume}} — {{habitos.tabaquismo.detalle}}
+- Alcohol: {{habitos.alcohol.consume}} — {{habitos.alcohol.detalle}}
+- Alimentación: {{habitos.alimentacion}}
+- Actividad física: {{habitos.actividad_fisica}}
+- Suplementos: {{habitos.suplementos}}
 
-## 7) Revisión por sistemas
-- Respiratorio: {{revision_sistemas.respiratorio}}
-- Cardiovascular: {{revision_sistemas.cardiovascular}}
-- Gastrointestinal: {{revision_sistemas.gastrointestinal}}
-- Neurológico: {{revision_sistemas.neurologico}}
-- Genitourinario: {{revision_sistemas.genitourinario}}
-- Otros: {{revision_sistemas.otros}}
+## 8) Signos vitales
+- Presión arterial: {{signos_vitales.presion_arterial}}
+- Frecuencia cardiaca: {{signos_vitales.frecuencia_cardiaca}}
+- Frecuencia respiratoria: {{signos_vitales.frecuencia_respiratoria}}
+- Temperatura: {{signos_vitales.temperatura}}
+- Saturación de oxígeno: {{signos_vitales.saturacion_oxigeno}}
+- Peso: {{signos_vitales.peso_kg}}
+- Talla: {{signos_vitales.talla_cm}}
+- Perímetro abdominal: {{signos_vitales.perimetro_abdominal_cm}}
 
-## 8) Observaciones adicionales
-- Presión arterial: {{observaciones_adicionales.presion_arterial}}
-- Frecuencia cardiaca: {{observaciones_adicionales.frecuencia_cardiaca}}
-- Frecuencia respiratoria: {{observaciones_adicionales.frecuencia_respiratoria}}
-- Temperatura: {{observaciones_adicionales.temperatura}}
-- Saturación de oxígeno: {{observaciones_adicionales.saturacion_oxigeno}}
-- Peso: {{observaciones_adicionales.peso}}
-- Talla: {{observaciones_adicionales.talla}}
-- Examen físico: {{observaciones_adicionales.examen_fisico}}
-- Notas: {{observaciones_adicionales.notas}}
+## 9) Examen físico
+- Estado general: {{examen_fisico.estado_general}}
+- Cardiopulmonar: {{examen_fisico.cardiopulmonar}}
+- Abdomen: {{examen_fisico.abdomen}}
+- Puño-percusión renal: {{examen_fisico.renal_ppl}}
+- Neurológico / pulsos: {{examen_fisico.neurologico_pulsos}}
+- Hallazgos relevantes: {{examen_fisico.hallazgos_relevantes}}
 
-## 9) Expectativas y plan inicial
-- Expectativas del paciente: {{expectativas_plan.expectativas_paciente}}
-- Orientaciones iniciales: {{expectativas_plan.orientaciones_iniciales}}
-- Conducta / remisiones: {{expectativas_plan.conducta_remisiones}}
-- Próximo control: {{expectativas_plan.proximo_control}}
+## 10) Laboratorios y exámenes
+{{laboratorios}}
+
+## 11) Plan
+- Diagnósticos: {{plan.diagnosticos}}
+- Órdenes de exámenes: {{plan.ordenes_examenes}}
+- Remisiones: {{plan.remisiones}}
+- Ajuste de medicación: {{plan.ajuste_medicacion}}
+- Recomendaciones: {{plan.recomendaciones}}
+- Próximo control: {{plan.proximo_control}}
 """.strip()
 
 

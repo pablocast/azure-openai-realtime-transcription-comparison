@@ -22,8 +22,11 @@
  */
 
 import {
+  ChatPricing,
+  computeChatCost,
   computeRealtimeCost,
   VoiceLivePricing,
+  type ChatUsage,
   type CostBreakdown,
   type Usage,
 } from "./costs";
@@ -32,8 +35,11 @@ import type { RealtimeHandlers } from "./realtime";
 export interface VoiceLiveTotals {
   /** Per-response usage from the service (audio in/out + text). */
   conversation: CostBreakdown;
+  /** Anamnesis extraction via /api/extract (structured JSON per turn). */
+  extract: CostBreakdown;
   total: number;
   pricingName: string;
+  extractPricingName: string;
 }
 
 interface VoiceLiveConfig {
@@ -53,6 +59,13 @@ const CAPTURE_BUFFER = 4096;
 
 const EMPTY: CostBreakdown = { totalCost: 0, parts: {} };
 const SPECIAL_TOKEN_RE = /<\|[^|>]+\|>/g;
+/** Chat (text) pricing keyed by the model tier sent to /api/extract. */
+const CHAT_PRICING_BY_TIER: Record<string, ChatPricing> = {
+  full: ChatPricing.full,
+  mini: ChatPricing.mini,
+  gpt5mini: ChatPricing.gpt5mini,
+  gpt54nano: ChatPricing.gpt54nano,
+};
 
 function clone(b: CostBreakdown): CostBreakdown {
   return { totalCost: b.totalCost, parts: { ...b.parts } };
@@ -133,16 +146,31 @@ export class VoiceLiveClient {
   private seenUserItems = new Set<string>();
   private assistantCurrent = "";
 
+  // ---- Anamnese (medical variant) extraction via /api/extract -----------
+  /** Latest accumulated form, fed back from the UI after each merge. */
+  private anamneseState: Record<string, unknown> = {};
+  /** Last completed assistant utterance (the doctor's question being answered). */
+  private lastAssistantUtterance = "";
+  /** The patient's most recent finalized utterance and its item id. */
+  private lastUserText = "";
+  private lastUserItemId = "";
+  /** Extraction model tier + pricing (passed from the UI). */
+  private extractTier = "full";
+  private extractPricing: ChatPricing = ChatPricing.full;
+
   private totals = {
     conversation: clone(EMPTY),
+    extract: clone(EMPTY),
   };
 
   constructor(private handlers: RealtimeHandlers) {}
 
-  /** Called by the UI after every merge; not used on the Voice Live path. */
-  setAnamneseState(_state: Record<string, unknown>): void {}
+  /** Called by the UI after every merge so the extractor sees accumulated state. */
+  setAnamneseState(state: Record<string, unknown>): void {
+    this.anamneseState = state ?? {};
+  }
 
-  async start(variant?: string, modelTier?: string, _extractTier?: string): Promise<void> {
+  async start(variant?: string, modelTier?: string, extractTier?: string): Promise<void> {
     this.handlers.onStateChange("connecting");
 
     const cfg = await fetchJson<VoiceLiveConfig>("/api/config");
@@ -154,6 +182,9 @@ export class VoiceLiveClient {
       cfg.defaultVoiceLivePromptVariant ?? allowedVariants[0] ?? cfg.defaultPromptVariant;
     this.variant = variant && allowedVariants.includes(variant) ? variant : defaultVariant;
     this.greeting = cfg.voiceLiveGreeting ?? "";
+    this.extractTier =
+      extractTier && CHAT_PRICING_BY_TIER[extractTier] ? extractTier : "full";
+    this.extractPricing = CHAT_PRICING_BY_TIER[this.extractTier] ?? ChatPricing.full;
 
     const models = cfg.voiceLiveModels ?? [];
     const model =
@@ -212,11 +243,14 @@ export class VoiceLiveClient {
     this.greetingSent = false;
     this.handlers.onStateChange("idle");
 
-    const total = this.totals.conversation.totalCost;
+    const total =
+      this.totals.conversation.totalCost + this.totals.extract.totalCost;
     return {
       conversation: this.totals.conversation,
+      extract: this.totals.extract,
       total,
       pricingName: this.pricing.name,
+      extractPricingName: this.extractPricing.name,
     };
   }
 
@@ -303,7 +337,6 @@ export class VoiceLiveClient {
       return;
     }
     this.greetingSent = true;
-    this.handlers.onLog("Sending greeting (response.create)");
     // Trigger the agent to open the conversation. We send a plain
     // response.create (no instructions override) so each prompt variant's own
     // system prompt drives the opening turn in the correct language.
@@ -318,7 +351,6 @@ export class VoiceLiveClient {
       return;
     }
     const type: string = evt.type ?? "(no type)";
-    this.handlers.onLog(`WS ◀ ${type}`);
 
     // ---- Errors: dump the whole payload, it carries the reason ----
     if (type === "error" || type === "response.error") {
@@ -346,6 +378,8 @@ export class VoiceLiveClient {
       return;
     }
     if (/(?:audio_)?transcript\.done$/.test(type) || type === "response.output_text.done" || type === "response.text.done") {
+      const finalText = sanitize(this.assistantCurrent);
+      if (finalText) this.lastAssistantUtterance = finalText;
       this.assistantCurrent = "";
       this.handlers.onAssistantTranscript("", true);
       return;
@@ -357,6 +391,7 @@ export class VoiceLiveClient {
       case "session.updated": {
         // Session is configured (prompt, server VAD, voice). Safe to greet.
         this.sessionReady = true;
+        this.handlers.onLog("─── Conversation started ───");
         this.sendGreeting();
         return;
       }
@@ -368,7 +403,9 @@ export class VoiceLiveClient {
       case "conversation.item.added":
       case "conversation.item.created": {
         const item = evt.item ?? {};
-        if (item.role === "user" && item.id) this.ensureUserTurn(item.id);
+        if (item.role === "user" && item.id) {
+          this.ensureUserTurn(item.id);
+        }
         return;
       }
       case "input_audio_buffer.speech_started":
@@ -384,6 +421,13 @@ export class VoiceLiveClient {
         this.ensureUserTurn(itemId);
         if (text) {
           this.handlers.onUserTranscript(itemId, text, "transcribe");
+        }
+        // Extract the anamnesis from the patient's transcribed turn via the
+        // backend REST endpoint (decoupled from the Voice Live conversation).
+        if (itemId && text) {
+          this.lastUserText = text;
+          this.lastUserItemId = itemId;
+          void this.runExtract();
         }
         return;
       }
@@ -409,6 +453,57 @@ export class VoiceLiveClient {
     if (!itemId || this.seenUserItems.has(itemId)) return;
     this.seenUserItems.add(itemId);
     this.handlers.onUserTurnStarted(itemId);
+  }
+
+  // ---- Anamnese extraction (medical variant) -----------------------------
+  /** Extract the anamnesis from the patient's latest turn via /api/extract.
+   *  This is a plain HTTP call to the backend (the same path the pipeline mode
+   *  uses), fully decoupled from the Voice Live WebSocket conversation. */
+  private async runExtract(): Promise<void> {
+    if (this.variant !== "medical") return;
+    const itemId = this.lastUserItemId;
+    const stateJson = JSON.stringify(this.anamneseState ?? {});
+    const today = new Date().toISOString().slice(0, 10);
+    const content =
+      `DOCTOR'S MOST RECENT UTTERANCE (context; source for plan, vitals, exam, labs):\n` +
+      `"${this.lastAssistantUtterance}"\n\n` +
+      `PATIENT'S ANSWER (clinical data comes ONLY from here):\n` +
+      `"${this.lastUserText}"\n\n` +
+      `CURRENT STATE (already captured; reproduce and extend, do not drop):\n${stateJson}\n\n` +
+      `TODAY: ${today}\n\n` +
+      `Return the COMPLETE anamnesis object. Use null for any field not yet known.`;
+
+    try {
+      const r = await fetch("/api/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content }],
+          model: this.extractTier,
+        }),
+      });
+      if (!r.ok) {
+        this.handlers.onLog(`Extract failed: ${r.status} ${await r.text()}`);
+        return;
+      }
+      const data = (await r.json()) as {
+        patch?: Record<string, unknown>;
+        usage?: ChatUsage;
+      };
+      if (data.usage) {
+        this.totals.extract = mergeCost(
+          this.totals.extract,
+          computeChatCost(data.usage, this.extractPricing),
+        );
+      }
+      if (data.patch && typeof data.patch === "object") {
+        this.handlers.onAnamnesePatch?.(data.patch, itemId);
+      }
+    } catch (err) {
+      this.handlers.onLog(
+        `Extract error: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 }
 

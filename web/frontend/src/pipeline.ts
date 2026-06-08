@@ -399,7 +399,7 @@ export class PipelineClient {
     const stateJson = JSON.stringify(this.anamneseState ?? {});
     const today = new Date().toISOString().slice(0, 10);
     const content =
-      `DOCTOR'S MOST RECENT UTTERANCE (context; source for expectativas_plan):\n` +
+      `DOCTOR'S MOST RECENT UTTERANCE (context; source for plan, vitals, exam, labs):\n` +
       `"${this.lastAssistantUtterance}"\n\n` +
       `PATIENT'S ANSWER (clinical data comes ONLY from here):\n` +
       `"${this.lastUserText}"\n\n` +

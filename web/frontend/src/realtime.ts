@@ -89,6 +89,11 @@ export class RealtimeClient {
   private variant = "v1";
   /** user item ids waiting for an anamnese OOB request. */
   private anamneseQueue: string[] = [];
+  /** Doctor-authored turns waiting for an anamnese OOB request. The doctor
+   *  measures vitals / reads labs / states the plan in her own speech, so
+   *  those sections must be extracted from the DOCTOR's utterance (there may
+   *  be no patient turn afterwards to trigger extraction). */
+  private anamneseDoctorQueue: Array<{ id: string; text: string }> = [];
   /** user item ids we've already enqueued for anamnese extraction. */
   private queuedAnamneseItems = new Set<string>();
   /** response.ids that we sent as anamnese OOB (vs transcription OOB / main). */
@@ -464,6 +469,20 @@ export class RealtimeClient {
           this.assistantCurrentTranscript;
         const cleaned = stripSpecialTokens(finalText).trim();
         if (cleaned) this.lastAssistantUtterance = cleaned;
+        // The doctor authors signos_vitales / examen_fisico / laboratorios /
+        // plan in her own speech. Extract those from THIS doctor turn, since
+        // there may be no patient turn afterwards to trigger extraction.
+        if (
+          cleaned &&
+          this.variant === "medical" &&
+          this.anamneseSchema
+        ) {
+          this.anamneseDoctorQueue.push({
+            id: `doctor-${Date.now()}`,
+            text: cleaned,
+          });
+          this.flushOobQueue();
+        }
         this.assistantCurrentTranscript = "";
         this.handlers.onAssistantTranscript("", true);
         return;
@@ -530,11 +549,10 @@ export class RealtimeClient {
         "years whenever `fecha_nacimiento` is known).";
       const doctorContext = this.lastAssistantUtterance
         ? "\n\nDOCTOR'S MOST RECENT UTTERANCE (the question the patient is " +
-          "answering in this turn — use it to decide which schema field " +
-          "the patient's answer belongs to. ALSO extract any plan items " +
-          "the doctor states here — exams ordered, prescriptions, " +
-          "referrals, follow-up date — into `expectativas_plan.*` per " +
-          "rule 2a; do NOT extract doctor words into any other section):\n\"" +
+          "answering in this turn — use it ONLY to decide which schema field " +
+          "the patient's answer belongs to. Do NOT extract the doctor's own " +
+          "words into any section here; vitals, exam, labs and plan are " +
+          "captured separately from the doctor's turn):\n\"" +
           this.lastAssistantUtterance +
           "\""
         : "";
@@ -587,6 +605,72 @@ export class RealtimeClient {
       };
       this.dc!.send(JSON.stringify(payload));
       this.handlers.onLog(`OOB anamnese requested for ${itemId}`);
+    }
+    // Doctor-authored extraction: vitals / exam / labs / plan come from the
+    // doctor's own speech, so reference her transcript text directly (there
+    // is no patient audio item to point at).
+    while (this.anamneseDoctorQueue.length && this.activeResponses === 0) {
+      const { id: doctorId, text: doctorText } = this.anamneseDoctorQueue.shift()!;
+      const compactState = compactNonEmpty(this.anamneseState ?? {}) ?? {};
+      const stateJson = JSON.stringify(compactState);
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const todayBlock =
+        "\n\nTODAY: " +
+        todayIso +
+        " (use this date to compute `identificacion.edad` in completed " +
+        "years whenever `fecha_nacimiento` is known).";
+      const instructions =
+        this.anamneseInstructions +
+        "\n\nCURRENT STATE (already captured; do NOT re-emit unchanged values):\n" +
+        stateJson +
+        todayBlock +
+        "\n\nTHIS INPUT IS THE DOCTOR'S OWN UTTERANCE (not the patient). The " +
+        "doctor measures vitals, performs the physical exam, reads lab " +
+        "results and states the plan in her own words. Extract ONLY the " +
+        "DOCTOR-AUTHORED sections from this input: `signos_vitales`, " +
+        "`examen_fisico`, `laboratorios` and `plan`. Do NOT touch any " +
+        "patient-history section (identificacion, motivo_consulta, " +
+        "enfermedad_actual, antecedentes_*, medicamentos_actuales, habitos) " +
+        "from this input.\n" +
+        "\n\nCRITICAL ANTI-HALLUCINATION RULES:\n" +
+        "- Extract ONLY values the DOCTOR explicitly said in this turn.\n" +
+        "- NEVER invent, infer, guess, or assume any value.\n" +
+        "- If a field was not stated, OMIT it entirely (or pass null).\n" +
+        "- Do NOT carry over examples from the system prompt as real data.\n\n" +
+        "Call the function `save_anamnesis` EXACTLY ONCE with ONLY the " +
+        "doctor-authored fields that are NEW or CORRECTED in this turn. Omit " +
+        "every other field. Do NOT speak. Do NOT emit any text.";
+      const relaxed = relaxSchemaForTool(this.anamneseSchema);
+      const tool: any = {
+        type: "function",
+        name: "save_anamnesis",
+        description:
+          "Persist ONLY doctor-authored fields (signos_vitales, examen_fisico, " +
+          "laboratorios, plan) explicitly stated in this doctor turn. Omit any " +
+          "field not said. NEVER invent or repeat already-captured values.",
+        parameters: relaxed,
+      };
+      const payload = {
+        type: "response.create",
+        response: {
+          conversation: "none",
+          output_modalities: ["text"],
+          max_output_tokens: 512,
+          metadata: { purpose: ANAMNESE_PURPOSE, item_id: doctorId },
+          instructions,
+          input: [
+            {
+              type: "message",
+              role: "user",
+              content: [{ type: "input_text", text: doctorText }],
+            },
+          ],
+          tools: [tool],
+          tool_choice: { type: "function", name: "save_anamnesis" },
+        },
+      };
+      this.dc!.send(JSON.stringify(payload));
+      this.handlers.onLog(`OOB anamnese (doctor) requested for ${doctorId}`);
     }
   }
 }

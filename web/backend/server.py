@@ -255,14 +255,14 @@ def _voice_live_session_update(variant: str, model: str) -> dict[str, Any]:
         "input_audio_echo_cancellation": {"type": "server_echo_cancellation"},
         "voice": {"name": VOICE_LIVE_VOICE, "type": "azure-standard"},
     }
-    # Native speech-to-speech models do not require explicit input transcription.
-    # Keep Azure Speech transcription only for text-centric tiers (for UI transcripts).
-    model_lower = model.lower()
-    if "phi4-mm" not in model_lower and "gpt-realtime" not in model_lower:
-        session["input_audio_transcription"] = {
-            "model": "azure-speech",
-            "language": VOICE_LIVE_TRANSCRIPTION_LANGUAGE,
-        }
+    # Always enable Azure Speech input transcription: the web UI needs the
+    # patient's transcribed text both for chat bubbles and to drive the
+    # out-of-band anamnese extraction (Voice Live response.create does not
+    # accept item_reference, so extraction is fed the transcript as text).
+    session["input_audio_transcription"] = {
+        "model": "azure-speech",
+        "language": VOICE_LIVE_TRANSCRIPTION_LANGUAGE,
+    }
     return {"type": "session.update", "session": session}
 
 
